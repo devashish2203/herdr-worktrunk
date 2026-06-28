@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Remover for the worktrunk herdr plugin — fzf over removable worktrees, then
 # `wt remove`. Plain bash, shell-agnostic: it calls the `wt` binary directly, so it
 # needs no shell-function/rc integration.
@@ -27,15 +27,9 @@ name=$(printf '%s\n' "$cands" \
 # Path of the worktree we're about to remove, so we can close orphaned panes after.
 wtpath=$(printf '%s\n' "$wtjson" | jq -r --arg b "$name" '.[] | select(.branch==$b) | .path')
 
-# wt's directive file isn't needed here (we don't cd), but setting it suppresses
-# wt's "run wt config shell install" hint when it removes the current worktree.
-WORKTRUNK_DIRECTIVE_FILE=$(mktemp)
-export WORKTRUNK_DIRECTIVE_FILE
-trap 'rm -f "$WORKTRUNK_DIRECTIVE_FILE"' EXIT
-
 # wt remove prompts for approval itself, refuses unmerged branches without -D, and
 # refuses worktrees with untracked files without -f — so run it interactively and let
-# worktrunk gate the destructive bits. --foreground keeps the overlay until it's done.
+# worktrunk gate the destructive bits. --foreground keeps the pane until it's done.
 if ! wt remove --foreground "$name"; then
   printf '\n\033[31m%s\033[0m press any key to close' "wt remove failed (see above)."; read -n1
   exit 0

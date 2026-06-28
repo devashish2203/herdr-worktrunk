@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Picker for the worktrunk herdr plugin. Picks a branch via fzf (fast), then opens a
 # new tab and runs `wt switch` in THAT pane — so the worktree creation and any hook
 # output happen in the pane you keep, not in this transient picker pane. The new tab
@@ -25,8 +25,6 @@ fi
 
 # Existing local branch → switch (wt creates the worktree if it doesn't exist yet);
 # anything else is a new branch → create it.
-# ponytail: local-branch existence is the existing-vs-new signal; revisit if you
-# want remote-tracking branches or PR shortcuts (pr:N) to count as "existing".
 if git show-ref --quiet --verify "refs/heads/$name"; then
   wtcmd="wt switch \"$name\""
 else
