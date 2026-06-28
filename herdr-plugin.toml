@@ -1,0 +1,38 @@
+id = "worktrunk"
+name = "Worktrunk"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+description = "Switch, create, or remove git worktrees via worktrunk"
+platforms = ["macos", "linux"]
+
+# Workspace action: opens the picker as an overlay. Plugin panes default their cwd to
+# the plugin root, so pass --cwd = the workspace's repo (from the injected context JSON);
+# otherwise `wt` runs in the plugin dir, not the repo you're in.
+[[actions]]
+id = "open"
+title = "Worktree: switch / create"
+contexts = ["workspace"]
+command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint picker --placement split --direction down --cwd \"$cwd\" --focus"]
+
+
+# Remove action: same overlay pattern, different entrypoint.
+[[actions]]
+id = "remove"
+title = "Worktree: remove"
+contexts = ["workspace"]
+command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint remover --placement split --direction down --cwd \"$cwd\" --focus"]
+
+# The overlays run as plain bash. The scripts call the `wt` binary directly and
+# handle worktrunk's cd directive themselves, so no shell-function/rc integration is
+# needed and they work whatever shell the user runs.
+[[panes]]
+id = "picker"
+title = "Worktrunk"
+placement = "split"
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/picker.sh\""]
+
+[[panes]]
+id = "remover"
+title = "Worktrunk — remove"
+placement = "split"
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/remove.sh\""]
