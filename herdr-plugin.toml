@@ -22,8 +22,8 @@ title = "Worktree: remove"
 contexts = ["workspace"]
 command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint remover --placement split --direction down --cwd \"$cwd\" --focus"]
 
-# Both panes run as plain bash. picker.sh runs `wt` in a fresh tab's shell (so
-# worktrunk's hooks and cd happen there); remove.sh runs the `wt` binary in-pane.
+# Both panes run as plain bash. Depending on plugin config, picker.sh opens the
+# checkout in a tab or registers it as a native herdr worktree workspace.
 [[panes]]
 id = "picker"
 title = "Worktrunk"

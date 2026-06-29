@@ -2,8 +2,8 @@
 
 A [herdr](https://herdr.dev) plugin for switching, creating, and removing git
 worktrees through [worktrunk](https://github.com/max-sixty/worktrunk). Pick (or
-type) a branch in an fzf picker and the worktree opens as a herdr tab — with
-worktrunk's hooks running along the way.
+type) a branch in an fzf picker and open the worktree as a herdr tab or a native
+worktree workspace — with worktrunk's hooks running along the way.
 
 ## Why this plugin
 
@@ -17,8 +17,8 @@ have no hook system.
 
 Rather than reimplement hooks inside herdr, this plugin wires worktrunk's `wt`
 into herdr: you get worktrunk's hook-driven workflow (plus its niceties — base
-branch selection, PR shortcuts, live preview) while the resulting worktree opens
-as a herdr tab in your current workspace.
+branch selection, PR shortcuts, live preview) while choosing whether the
+resulting worktree opens as a tab or as a native linked-worktree workspace.
 
 ## What it does
 
@@ -26,13 +26,41 @@ Two workspace actions:
 
 - **Worktree: switch / create** — opens an fzf picker over your worktree
   branches. Press `Enter` on a match to switch to it, or type a new name and
-  press `Enter` to create it. The worktree opens in a new herdr tab where `wt`
-  runs, so worktrunk's create hooks execute in the pane you land in.
+  press `Enter` to create it. Worktrunk's lifecycle hooks run in either
+  presentation mode, and the checkout opens as a tab or a native worktree
+  workspace according to plugin configuration.
 - **Worktree: remove** — opens an fzf picker over removable worktrees
   (everything except the main checkout). Pick one; worktrunk prompts for
   confirmation and gates unmerged branches / untracked files itself, then
-  removes it. Any herdr panes left sitting inside the deleted worktree are
-  closed automatically.
+  removes it. The native workspace or any legacy tab panes associated with the
+  deleted worktree are closed automatically.
+
+## Worktree presentation
+
+The plugin keeps its original tab-based behavior by default. To organize
+worktrees the same way as herdr's built-in worktree support, set `open_mode` to
+`"workspace"` in the plugin's managed configuration directory:
+
+```bash
+config_dir=$(herdr plugin config-dir worktrunk)
+mkdir -p "$config_dir"
+${EDITOR:-vi} "$config_dir/config.toml"
+```
+
+```toml
+open_mode = "workspace"
+```
+
+Supported values:
+
+- `open_mode = "tab"` — open a new tab in the current workspace and run `wt`
+  there. This is the default and preserves the original plugin behavior.
+- `open_mode = "workspace"` — let Worktrunk create or switch the checkout and
+  run its hooks, then register that checkout with `herdr worktree open`. Herdr
+  displays it as a nested worktree workspace in the sidebar.
+
+The config file is read each time the picker runs, so changing the mode does not
+require reinstalling or reloading the plugin.
 
 ## Requirements
 
@@ -106,11 +134,13 @@ herdr server reload-config
 
 ## Development
 
-The plugin is just a manifest plus two bash scripts:
+The plugin is a manifest plus small bash scripts:
 
 - `herdr-plugin.toml` — actions and panes
+- `config.sh` — worktree presentation configuration
 - `picker.sh` — the switch / create picker
 - `remove.sh` — the remove picker + orphaned-pane cleanup
+- `tests/config_test.sh` — configuration parser checks
 
 herdr caches the manifest when a plugin is linked, so after editing
 `herdr-plugin.toml` you must relink for changes to take effect:
@@ -119,8 +149,7 @@ herdr caches the manifest when a plugin is linked, so after editing
 herdr plugin unlink worktrunk && herdr plugin link "$PWD"
 ```
 
-Edits to `picker.sh` / `remove.sh` are picked up on the next run — no relink
-needed.
+Edits to the bash scripts are picked up on the next run — no relink needed.
 
 ## License
 
