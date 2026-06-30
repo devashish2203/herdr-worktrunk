@@ -23,21 +23,60 @@ else
 fi
 [[ -z $name ]] && exit 0
 
+plugin_root=${HERDR_PLUGIN_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)}
+# shellcheck source=./config.sh
+source "$plugin_root/config.sh"
+open_mode=$(worktrunk_open_mode)
+
 # Existing local branch → switch (wt creates the worktree if it doesn't exist yet);
 # anything else is a new branch → create it.
 if git show-ref --quiet --verify "refs/heads/$name"; then
-  wtcmd="wt switch \"$name\""
+  wtargs=(switch "$name")
 else
-  wtcmd="wt switch --create \"$name\""
+  wtargs=(switch --create "$name")
 fi
 
-# Open a tab in the workspace the picker was invoked in (--workspace, so it doesn't
-# follow you if you switch away), rooted at the repo, then run wt in its pane.
 herdr=${HERDR_BIN_PATH:-herdr}
-newpane=$("$herdr" tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$PWD" --label "$name" --focus \
-  | jq -r '.result.root_pane.pane_id')
-[[ -z $newpane ]] && { printf '\033[31m%s\033[0m\n' "failed to open worktree tab"; sleep 2; exit 1; }
 
-# pane run sends the command to the tab's interactive shell; the terminal buffers it
-# until the shell finishes loading, so its `wt` function is in place when it runs.
-"$herdr" pane run "$newpane" "$wtcmd"
+if [[ $open_mode == tab ]]; then
+  # Preserve the original behavior: run wt in a new tab's interactive shell so
+  # shell integration can cd into the worktree and keep the user there.
+  printf -v quoted_name '%q' "$name"
+  if [[ ${wtargs[1]} == --create ]]; then
+    wtcmd="wt switch --create $quoted_name"
+  else
+    wtcmd="wt switch $quoted_name"
+  fi
+
+  newpane=$("$herdr" tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$PWD" --label "$name" --focus \
+    | jq -r '.result.root_pane.pane_id')
+  [[ -z $newpane ]] && { printf '\033[31m%s\033[0m\n' "failed to open worktree tab"; sleep 2; exit 1; }
+
+  # pane run sends the command to the tab's interactive shell; the terminal buffers it
+  # until the shell finishes loading, so its `wt` function is in place when it runs.
+  "$herdr" pane run "$newpane" "$wtcmd"
+  exit
+fi
+
+# Native workspace mode: let worktrunk create/switch the checkout and run hooks,
+# then register the resulting existing checkout through herdr's worktree API.
+if ! result=$(wt "${wtargs[@]}" --no-cd --format=json); then
+  printf '\n\033[31m%s\033[0m press any key to close' "wt switch failed (see above)."
+  read -n1
+  exit 1
+fi
+
+wtpath=$(printf '%s\n' "$result" | jq -r '.path // empty' 2>/dev/null)
+if [[ -z $wtpath ]]; then
+  wtpath=$(wt list --format=json 2>/dev/null \
+    | jq -r --arg b "$name" '.[] | select(.branch == $b and .kind == "worktree") | .path' \
+    | head -n1)
+fi
+if [[ -z $wtpath ]]; then
+  printf '\033[31m%s\033[0m\n' "worktrunk returned no worktree path for: $name"
+  sleep 2
+  exit 1
+fi
+
+exec "$herdr" worktree open --workspace "$HERDR_WORKSPACE_ID" \
+  --path "$wtpath" --label "$name" --focus --json

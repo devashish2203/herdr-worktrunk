@@ -24,8 +24,12 @@ name=$(printf '%s\n' "$cands" \
         --header='↵ to remove (worktrunk will ask to confirm) · esc to cancel')
 [[ -z $name ]] && exit 0      # esc / no selection → cancel
 
-# Path of the worktree we're about to remove, so we can close orphaned panes after.
+# Path and native herdr workspace (if open) of the worktree we're about to remove.
 wtpath=$(printf '%s\n' "$wtjson" | jq -r --arg b "$name" '.[] | select(.branch==$b) | .path')
+wsid=$("$herdr" worktree list --cwd "$PWD" --json 2>/dev/null \
+  | jq -r --arg p "$wtpath" \
+      '.result.worktrees[] | select(.path == $p) | .open_workspace_id // empty' \
+  | head -n1)
 
 # wt remove prompts for approval itself, refuses unmerged branches without -D, and
 # refuses worktrees with untracked files without -f — so run it interactively and let
@@ -35,11 +39,11 @@ if ! wt remove --foreground "$name"; then
   exit 0
 fi
 
-# Close any panes left sitting in the now-deleted worktree (or a subdir of it),
-# except this overlay. Guard against an empty path matching everything.
-# ponytail: matches the pane's shell cwd string; a process that cd'd elsewhere
-# under a still-open shell won't be caught — fine for the common shell-in-worktree case.
-if [[ -n $wtpath && $wtpath != "/" ]]; then
+# Close a native worktree workspace as a unit. Fall back to pane cleanup for the
+# original tab-based mode and worktrees opened by older plugin versions.
+if [[ -n $wsid ]]; then
+  "$herdr" workspace close "$wsid"
+elif [[ -n $wtpath && $wtpath != "/" ]]; then
   "$herdr" pane list 2>/dev/null \
     | jq -r --arg p "$wtpath" --arg self "${HERDR_PANE_ID:-}" \
         '.result.panes[] | select(.pane_id != $self)
