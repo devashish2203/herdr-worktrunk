@@ -15,21 +15,21 @@ assert_mode() {
 }
 
 unset HERDR_PLUGIN_CONFIG_DIR
-assert_mode tab
+assert_mode workspace
 
 config_dir=$(mktemp -d)
 trap 'rm -rf "$config_dir"' EXIT
 export HERDR_PLUGIN_CONFIG_DIR=$config_dir
 
-assert_mode tab
-
-printf 'open_mode = "workspace"\n' > "$config_dir/config.toml"
 assert_mode workspace
 
-printf 'open_mode = "tab" # keep the original presentation\n' > "$config_dir/config.toml"
+printf 'open_mode = "tab"\n' > "$config_dir/config.toml"
 assert_mode tab
 
+printf 'open_mode = "workspace" # native worktree workspace\n' > "$config_dir/config.toml"
+assert_mode workspace
+
 printf 'open_mode = "unsupported"\n' > "$config_dir/config.toml"
-assert_mode tab
+assert_mode workspace
 
 printf 'config tests passed\n'

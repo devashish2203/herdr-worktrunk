@@ -37,9 +37,10 @@ Two workspace actions:
 
 ## Worktree presentation
 
-The plugin keeps its original tab-based behavior by default. To organize
-worktrees the same way as herdr's built-in worktree support, set `open_mode` to
-`"workspace"` in the plugin's managed configuration directory:
+By default the plugin organizes worktrees the same way as herdr's built-in
+worktree support: each checkout becomes a nested worktree workspace in the
+sidebar. To restore the original tab-based behavior, set `open_mode` to `"tab"`
+in the plugin's managed configuration directory:
 
 ```bash
 config_dir=$(herdr plugin config-dir worktrunk)
@@ -48,16 +49,16 @@ ${EDITOR:-vi} "$config_dir/config.toml"
 ```
 
 ```toml
-open_mode = "workspace"
+open_mode = "tab"
 ```
 
 Supported values:
 
-- `open_mode = "tab"` — open a new tab in the current workspace and run `wt`
-  there. This is the default and preserves the original plugin behavior.
 - `open_mode = "workspace"` — let Worktrunk create or switch the checkout and
   run its hooks, then register that checkout with `herdr worktree open`. Herdr
-  displays it as a nested worktree workspace in the sidebar.
+  displays it as a nested worktree workspace in the sidebar. This is the default.
+- `open_mode = "tab"` — open a new tab in the current workspace and run `wt`
+  there. This preserves the original plugin behavior.
 
 The config file is read each time the picker runs, so changing the mode does not
 require reinstalling or reloading the plugin.
@@ -65,7 +66,7 @@ require reinstalling or reloading the plugin.
 ## Requirements
 
 - [**herdr**](https://herdr.dev) ≥ 0.7.0
-- [**worktrunk**](https://github.com/max-sixty/worktrunk) — the `wt` CLI on your `PATH`
+- [**worktrunk**](https://github.com/max-sixty/worktrunk) ≥ 0.60.0 — the `wt` CLI on your `PATH`
 - **fzf** — the interactive picker
 - **jq** — JSON parsing
 - **bash** — the scripts run with `/bin/bash`
