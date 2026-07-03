@@ -82,5 +82,17 @@ if [[ -z $wtpath ]]; then
   exit 1
 fi
 
-exec "$herdr" worktree open --workspace "$HERDR_WORKSPACE_ID" \
+# Register the worktree under the repo's ROOT workspace, not the picker pane's
+# current workspace. When the picker runs from inside an existing worktree
+# workspace, $HERDR_WORKSPACE_ID is that worktree's own (linked-worktree)
+# workspace, and `worktree open` rejects it with `linked_worktree_source`
+# ("New and open worktree actions start from the repo parent workspace."), so
+# the checkout never surfaces in the sidebar. herdr resolves the repo's root
+# workspace from any checkout cwd via .result.source.source_workspace_id, so
+# prefer that; fall back to the pane's workspace if it can't be resolved.
+root_ws=$("$herdr" worktree list --cwd "$PWD" --json 2>/dev/null \
+  | jq -r '.result.source.source_workspace_id // empty')
+[[ -z $root_ws ]] && root_ws=$HERDR_WORKSPACE_ID
+
+exec "$herdr" worktree open --workspace "$root_ws" \
   --path "$wtpath" --label "$name" --focus --json
