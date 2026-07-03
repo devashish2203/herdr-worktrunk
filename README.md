@@ -90,12 +90,11 @@ herdr plugin link /path/to/herdr-worktrunk
 
 ## Usage
 
-Trigger the actions from herdr's workspace action menu:
+### Create/Switch a worktree
+herdr plugin action invoke open --plugin worktrunk
 
-- **Worktree: switch / create**
-- **Worktree: remove**
-
-Each opens a split picker pane rooted at your current repo.
+### Remove Worktree
+ herdr plugin action invoke open --plugin worktrunk
 
 ## Keybindings
 
