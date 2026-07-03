@@ -28,9 +28,11 @@ plugin_root=${HERDR_PLUGIN_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && 
 source "$plugin_root/config.sh"
 open_mode=$(worktrunk_open_mode)
 
-# Existing local branch → switch (wt creates the worktree if it doesn't exist yet);
-# anything else is a new branch → create it.
-if git show-ref --quiet --verify "refs/heads/$name"; then
+# Existing local branch → switch (wt creates the worktree if it doesn't exist yet).
+# A `:` means worktrunk-native syntax — pr:123, mr:123, or a PR/MR URL (https://…):
+# git branch names can't contain `:`, so let worktrunk resolve these, never --create.
+# Anything else is a new branch → create it.
+if [[ $name == *:* ]] || git show-ref --quiet --verify "refs/heads/$name"; then
   wtargs=(switch "$name")
 else
   wtargs=(switch --create "$name")
