@@ -26,7 +26,7 @@ Two workspace actions:
 
 - **Worktree: switch / create** — opens an fzf picker over your worktree
   branches. Press `Enter` on a match to switch to it, or type a new name and
-  press `Enter` to creaite it. Typing a new name supports [worktrunk syntax for PR/MR along with other shortcuts](https://worktrunk.dev/switch/#shortcuts). Worktrunk's lifecycle hooks run in either
+  press `Enter` to create it. Typing a new name supports [worktrunk syntax for PR/MR along with other shortcuts](https://worktrunk.dev/switch/#shortcuts). Worktrunk's lifecycle hooks run in either
   presentation mode, and the checkout opens as a tab or a native worktree
   workspace according to plugin configuration.
 
@@ -92,10 +92,14 @@ herdr plugin link /path/to/herdr-worktrunk
 ## Usage
 
 ### Create/Switch a worktree
+```
 herdr plugin action invoke open --plugin worktrunk
+```
 
 ### Remove Worktree
- herdr plugin action invoke open --plugin worktrunk
+```
+herdr plugin action invoke remove --plugin worktrunk
+```
 
 ## Keybindings
 
