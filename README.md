@@ -26,9 +26,10 @@ Two workspace actions:
 
 - **Worktree: switch / create** — opens an fzf picker over your worktree
   branches. Press `Enter` on a match to switch to it, or type a new name and
-  press `Enter` to create it. Worktrunk's lifecycle hooks run in either
+  press `Enter` to creaite it. Typing a new name supports [worktrunk syntax for PR/MR along with other shortcuts](https://worktrunk.dev/switch/#shortcuts). Worktrunk's lifecycle hooks run in either
   presentation mode, and the checkout opens as a tab or a native worktree
   workspace according to plugin configuration.
+
 - **Worktree: remove** — opens an fzf picker over removable worktrees
   (everything except the main checkout). Pick one; worktrunk prompts for
   confirmation and gates unmerged branches / untracked files itself, then
@@ -138,9 +139,11 @@ The plugin is a manifest plus small bash scripts:
 
 - `herdr-plugin.toml` — actions and panes
 - `config.sh` — worktree presentation configuration
+- `helpers.sh` — shared shell helpers (e.g. worktrunk shortcut detection)
 - `picker.sh` — the switch / create picker
 - `remove.sh` — the remove picker + orphaned-pane cleanup
 - `tests/config_test.sh` — configuration parser checks
+- `tests/helpers_test.sh` — helper function checks
 
 herdr caches the manifest when a plugin is linked, so after editing
 `herdr-plugin.toml` you must relink for changes to take effect:
