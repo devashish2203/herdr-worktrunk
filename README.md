@@ -22,13 +22,19 @@ resulting worktree opens as a tab or as a native linked-worktree workspace.
 
 ## What it does
 
-Two workspace actions:
+Three workspace actions:
 
-- **Worktree: switch / create** — opens an fzf picker over your worktree
-  branches. Press `Enter` on a match to switch to it, or type a new name and
-  press `Enter` to create it. Typing a new name supports [worktrunk syntax for PR/MR along with other shortcuts](https://worktrunk.dev/switch/#shortcuts). Worktrunk's lifecycle hooks run in either
-  presentation mode, and the checkout opens as a tab or a native worktree
-  workspace according to plugin configuration.
+- **Worktree: switch / create from default branch** — opens an fzf picker over
+  your worktree branches. Press `Enter` on a match to switch to it, or type a
+  new name and press `Enter` to create it from worktrunk's default base branch.
+
+- **Worktree: switch / create from current branch** — the same picker, but typed
+  new branch names are created with `wt switch --create --base @`, i.e. from the
+  currently checked-out branch/worktree.
+
+Both create actions support [worktrunk syntax for PR/MR along with other shortcuts](https://worktrunk.dev/switch/#shortcuts).
+Worktrunk's lifecycle hooks run in either presentation mode, and the checkout
+opens as a tab or a native worktree workspace according to plugin configuration.
 
 - **Worktree: remove** — opens an fzf picker over removable worktrees
   (everything except the main checkout). Pick one; worktrunk prompts for
@@ -61,19 +67,8 @@ Supported values:
 - `open_mode = "tab"` — open a new tab in the current workspace and run `wt`
   there. This preserves the original plugin behavior.
 
-You can also customize the base used when creating a new branch:
-
-```toml
-# Empty/unset: use worktrunk's default base branch behavior.
-# Supports the same values as `wt switch --create --base`, for example:
-#   "^"              default branch
-#   "@"              current branch/worktree
-#   "release/1.4.6"  fixed branch
-create_base = "@"
-```
-
-The config file is read each time the picker runs, so changing the mode or
-create base does not require reinstalling or reloading the plugin.
+The config file is read each time the picker runs, so changing the mode does
+not require reinstalling or reloading the plugin.
 
 ## Requirements
 
@@ -102,9 +97,14 @@ herdr plugin link /path/to/herdr-worktrunk
 
 ## Usage
 
-### Create/Switch a worktree
+### Create/Switch a worktree from the default branch
 ```
 herdr plugin action invoke open --plugin worktrunk
+```
+
+### Create/Switch a worktree from the current branch
+```
+herdr plugin action invoke open-current --plugin worktrunk
 ```
 
 ### Remove Worktree
@@ -121,12 +121,19 @@ plugin's action id qualified with the plugin id (`worktrunk.<action>`; run
 
 ```toml
 # Override herdr's built-in "new worktree" key (prefix+shift+g) with worktrunk's
-# switch/create picker:
+# default-branch switch/create picker:
 [[keys.command]]
 key = "prefix+shift+g"
 type = "plugin_action"
 command = "worktrunk.open"
-description = "Worktree: switch / create"
+description = "Worktree: switch / create from default branch"
+
+# Optional: bind current-branch creation separately.
+[[keys.command]]
+key = "prefix+shift+c"
+type = "plugin_action"
+command = "worktrunk.open-current"
+description = "Worktree: switch / create from current branch"
 
 [[keys.command]]
 key = "prefix+shift+d"
@@ -137,10 +144,10 @@ description = "Worktree: remove"
 
 **Recommended:** override herdr's built-in worktree management with these. herdr
 binds `prefix+shift+g` to "new worktree" by default, and a custom keybinding takes
-precedence over the built-in on the same key — so mapping `worktrunk.open` to
-`prefix+shift+g` replaces it with worktrunk's switch/create picker, hooks included.
-Pick a matching key (e.g. `prefix+shift+d`) for `worktrunk.remove` to round out the
-workflow.
+precedence over the built-in on the same key — so mapping `worktrunk.open`
+to `prefix+shift+g` replaces it with worktrunk's switch/create picker, hooks
+included. Pick matching keys for `worktrunk.open-current` and `worktrunk.remove`
+to round out the workflow.
 
 Reload the config after editing it:
 

@@ -5,15 +5,20 @@ min_herdr_version = "0.7.0"
 description = "Switch, create, or remove git worktrees via worktrunk"
 platforms = ["macos", "linux"]
 
-# Workspace action: opens the picker in a split pane. Plugin panes default their cwd to
+# Workspace actions: open the picker in a split pane. Plugin panes default their cwd to
 # the plugin root, so pass --cwd = the workspace's repo (from the injected context JSON);
 # otherwise `wt` runs in the plugin dir, not the repo you're in.
 [[actions]]
 id = "open"
-title = "Worktree: switch / create"
+title = "Worktree: switch / create from default branch"
 contexts = ["workspace"]
-command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint picker --placement split --direction down --cwd \"$cwd\" --focus"]
+command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint picker-default --placement split --direction down --cwd \"$cwd\" --focus"]
 
+[[actions]]
+id = "open-current"
+title = "Worktree: switch / create from current branch"
+contexts = ["workspace"]
+command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint picker-current --placement split --direction down --cwd \"$cwd\" --focus"]
 
 # Remove action: same split-pane pattern, different entrypoint.
 [[actions]]
@@ -25,10 +30,16 @@ command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd' <<<\
 # Both panes run as plain bash. Depending on plugin config, picker.sh opens the
 # checkout in a tab or registers it as a native herdr worktree workspace.
 [[panes]]
-id = "picker"
-title = "Worktrunk"
+id = "picker-default"
+title = "Worktrunk — default branch"
 placement = "split"
-command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/picker.sh\""]
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/picker.sh\" --create-base=default"]
+
+[[panes]]
+id = "picker-current"
+title = "Worktrunk — current branch"
+placement = "split"
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/picker.sh\" --create-base=current"]
 
 [[panes]]
 id = "remover"

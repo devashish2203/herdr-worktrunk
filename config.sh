@@ -37,9 +37,3 @@ worktrunk_open_mode() {
       ;;
   esac
 }
-
-# Print the configured base passed to `wt switch --create --base`. Empty means
-# let worktrunk use its own default base branch behavior.
-worktrunk_create_base() {
-  worktrunk_config_value create_base
-}

@@ -4,6 +4,31 @@
 # output happen in the pane you keep, not in this transient picker pane. The new tab
 # runs your interactive shell, so its `wt` function cd's into the worktree and sticks.
 
+create_base=""
+create_base_label="default branch"
+case ${1:-} in
+  ""|--create-base=default)
+    ;;
+  --create-base=current)
+    create_base="@"
+    current_branch=$(git branch --show-current 2>/dev/null || true)
+    if [[ -n $current_branch ]]; then
+      create_base_label="current branch (${current_branch})"
+    else
+      current_commit=$(git rev-parse --short HEAD 2>/dev/null || true)
+      if [[ -n $current_commit ]]; then
+        create_base_label="current HEAD (${current_commit})"
+      else
+        create_base_label="current branch"
+      fi
+    fi
+    ;;
+  *)
+    printf '\033[31m%s\033[0m\n' "unsupported picker option: $1" >&2
+    exit 2
+    ;;
+esac
+
 # fzf over existing worktree branches; --print-query returns a typed-but-unmatched
 # name so we can create it. Falls back to a plain read if fzf isn't on PATH.
 if command -v fzf >/dev/null; then
@@ -12,13 +37,13 @@ if command -v fzf >/dev/null; then
       | jq -r '.[] | select(.branch != null) | .branch' \
       | fzf --print-query --reverse --info=inline --border=rounded --margin=20%,30% \
             --prompt='worktree ❯ ' \
-            --header='↵ on a match → switch · type a new name + ↵ → create · esc → cancel'
+            --header="↵ on a match → switch · type a new name + ↵ → create from ${create_base_label} · esc → cancel"
   )
   ret=$?
   [[ $ret -gt 1 ]] && exit 0      # 130 = esc/abort → cancel (0 = picked, 1 = typed-new)
   name=${choice##*$'\n'}          # last line: the selection if any, else the typed query
 else
-  printf 'Branch (existing → switch · new → create): '
+  printf 'Branch (existing → switch · new → create from %s): ' "$create_base_label"
   read -r name
 fi
 [[ -z $name ]] && exit 0
@@ -39,7 +64,6 @@ if worktrunk_is_shortcut "$name" || git show-ref --quiet --verify "refs/heads/$n
   is_create=false
 else
   wtargs=(switch --create "$name")
-  create_base=$(worktrunk_create_base)
   [[ -n $create_base ]] && wtargs+=(--base "$create_base")
   is_create=true
 fi
@@ -51,7 +75,6 @@ if [[ $open_mode == tab ]]; then
   # shell integration can cd into the worktree and keep the user there.
   printf -v quoted_name '%q' "$name"
   if [[ $is_create == true ]]; then
-    create_base=$(worktrunk_create_base)
     if [[ -n $create_base ]]; then
       printf -v quoted_base '%q' "$create_base"
       wtcmd="wt switch --create $quoted_name --base $quoted_base"
