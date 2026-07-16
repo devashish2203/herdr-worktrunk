@@ -61,8 +61,19 @@ Supported values:
 - `open_mode = "tab"` — open a new tab in the current workspace and run `wt`
   there. This preserves the original plugin behavior.
 
-The config file is read each time the picker runs, so changing the mode does not
-require reinstalling or reloading the plugin.
+You can also customize the base used when creating a new branch:
+
+```toml
+# Empty/unset: use worktrunk's default base branch behavior.
+# Supports the same values as `wt switch --create --base`, for example:
+#   "^"              default branch
+#   "@"              current branch/worktree
+#   "release/1.4.6"  fixed branch
+create_base = "@"
+```
+
+The config file is read each time the picker runs, so changing the mode or
+create base does not require reinstalling or reloading the plugin.
 
 ## Requirements
 

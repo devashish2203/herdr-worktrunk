@@ -36,8 +36,12 @@ open_mode=$(worktrunk_open_mode)
 # Anything else is a new branch → create it.
 if worktrunk_is_shortcut "$name" || git show-ref --quiet --verify "refs/heads/$name"; then
   wtargs=(switch "$name")
+  is_create=false
 else
   wtargs=(switch --create "$name")
+  create_base=$(worktrunk_create_base)
+  [[ -n $create_base ]] && wtargs+=(--base "$create_base")
+  is_create=true
 fi
 
 herdr=${HERDR_BIN_PATH:-herdr}
@@ -46,8 +50,14 @@ if [[ $open_mode == tab ]]; then
   # Preserve the original behavior: run wt in a new tab's interactive shell so
   # shell integration can cd into the worktree and keep the user there.
   printf -v quoted_name '%q' "$name"
-  if [[ ${wtargs[1]} == --create ]]; then
-    wtcmd="wt switch --create $quoted_name"
+  if [[ $is_create == true ]]; then
+    create_base=$(worktrunk_create_base)
+    if [[ -n $create_base ]]; then
+      printf -v quoted_base '%q' "$create_base"
+      wtcmd="wt switch --create $quoted_name --base $quoted_base"
+    else
+      wtcmd="wt switch --create $quoted_name"
+    fi
   else
     wtcmd="wt switch $quoted_name"
   fi
