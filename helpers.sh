@@ -11,3 +11,11 @@ worktrunk_is_shortcut() {
     *) return 1 ;;
   esac
 }
+
+# True when NAME is an existing local branch or remote-tracking branch. Such refs
+# are checked out directly by `wt switch NAME` (worktrunk creates the worktree if
+# one doesn't exist yet), so they must never be passed with --create.
+worktrunk_ref_exists() {
+  git show-ref --quiet --verify "refs/heads/$1" \
+    || git show-ref --quiet --verify "refs/remotes/$1"
+}

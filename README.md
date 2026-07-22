@@ -25,8 +25,10 @@ resulting worktree opens as a tab or as a native linked-worktree workspace.
 Three workspace actions:
 
 - **Worktree: switch / create from default branch** — opens an fzf picker over
-  your worktree branches. Press `Enter` on a match to switch to it, or type a
-  new name and press `Enter` to create it from worktrunk's default base branch.
+  your existing worktrees, local branches without worktrees, and remote-tracking
+  branches (e.g. `origin/foo`; run `git fetch` yourself to refresh these). Press
+  `Enter` on a match to switch to it, or type a new name and press `Enter` to
+  create it from worktrunk's default base branch.
 
 - **Worktree: switch / create from current branch** — the same picker, but typed
   new branch names are created with `wt switch --create --base @`, i.e. from the

@@ -33,8 +33,12 @@ esac
 # name so we can create it. Falls back to a plain read if fzf isn't on PATH.
 if command -v fzf >/dev/null; then
   choice=$(
-    wt list --format=json 2>/dev/null \
-      | jq -r '.[] | select(.branch != null) | .branch' \
+    {
+      wt list --format=json 2>/dev/null \
+        | jq -r '.[] | select(.branch != null) | .branch'
+      git for-each-ref --format='%(refname:short)' refs/heads refs/remotes 2>/dev/null \
+        | grep -v '/HEAD$'
+    } | awk '!seen[$0]++' \
       | fzf --print-query --reverse --info=inline --border=rounded --margin=20%,30% \
             --prompt='worktree ❯ ' \
             --header="↵ on a match → switch · type a new name + ↵ → create from ${create_base_label} · esc → cancel"
@@ -55,11 +59,12 @@ source "$plugin_root/config.sh"
 source "$plugin_root/helpers.sh"
 open_mode=$(worktrunk_open_mode)
 
-# Existing local branch → switch (wt creates the worktree if it doesn't exist yet).
+# Existing local or remote-tracking branch → switch (wt creates the worktree if
+# it doesn't exist yet, and checks out a remote ref like origin/foo directly).
 # worktrunk shortcuts (^ default, - previous, pr:N/mr:N, PR/MR URL) are resolved
 # by worktrunk itself, so pass them through as-is — never --create.
 # Anything else is a new branch → create it.
-if worktrunk_is_shortcut "$name" || git show-ref --quiet --verify "refs/heads/$name"; then
+if worktrunk_is_shortcut "$name" || worktrunk_ref_exists "$name"; then
   wtargs=(switch "$name")
   is_create=false
 else
