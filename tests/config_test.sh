@@ -32,4 +32,25 @@ assert_mode workspace
 printf 'open_mode = "unsupported"\n' > "$config_dir/config.toml"
 assert_mode workspace
 
+assert_remote() {
+  local expected=$1 actual
+  actual=$(worktrunk_show_remote_branches 2>/dev/null)
+  if [[ $actual != "$expected" ]]; then
+    printf 'expected show_remote_branches %q, got %q\n' "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
+printf 'open_mode = "tab"\n' > "$config_dir/config.toml"   # unrelated key → default
+assert_remote false
+
+printf 'show_remote_branches = true\n' > "$config_dir/config.toml"    # bare TOML bool
+assert_remote true
+
+printf 'show_remote_branches = "false"\n' > "$config_dir/config.toml" # quoted also ok
+assert_remote false
+
+printf 'show_remote_branches = maybe\n' > "$config_dir/config.toml"   # unsupported → default
+assert_remote false
+
 printf 'config tests passed\n'

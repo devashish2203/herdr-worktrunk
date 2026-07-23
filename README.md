@@ -25,10 +25,10 @@ resulting worktree opens as a tab or as a native linked-worktree workspace.
 Three workspace actions:
 
 - **Worktree: switch / create from default branch** — opens an fzf picker over
-  your existing worktrees, local branches without worktrees, and remote-tracking
-  branches (e.g. `origin/foo`; run `git fetch` yourself to refresh these). Press
-  `Enter` on a match to switch to it, or type a new name and press `Enter` to
-  create it from worktrunk's default base branch.
+  your existing worktrees and local branches without worktrees (remote-tracking
+  branches too, if enabled — see [Remote branches in the picker](#remote-branches-in-the-picker)).
+  Press `Enter` on a match to switch to it, or type a new name and press `Enter`
+  to create it from worktrunk's default base branch.
 
 - **Worktree: switch / create from current branch** — the same picker, but typed
   new branch names are created with `wt switch --create --base @`, i.e. from the
@@ -71,6 +71,18 @@ Supported values:
 
 The config file is read each time the picker runs, so changing the mode does
 not require reinstalling or reloading the plugin.
+
+## Remote branches in the picker
+
+By default the picker lists only your worktrees and local branches. To also
+offer remote-tracking branches (e.g. `origin/foo`; run `git fetch` yourself to
+refresh these), set `show_remote_branches` to `true` in the same `config.toml`:
+
+```toml
+show_remote_branches = true
+```
+
+Local branches without worktrees always appear regardless of this setting.
 
 ## Requirements
 

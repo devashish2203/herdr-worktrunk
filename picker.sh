@@ -29,6 +29,17 @@ case ${1:-} in
     ;;
 esac
 
+plugin_root=${HERDR_PLUGIN_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)}
+# shellcheck source=./config.sh
+source "$plugin_root/config.sh"
+# shellcheck source=./helpers.sh
+source "$plugin_root/helpers.sh"
+
+# Branch refs to offer alongside `wt list`: always local heads, plus
+# remote-tracking branches unless disabled via show_remote_branches = false.
+branch_refs=(refs/heads refs/remotes)
+[[ $(worktrunk_show_remote_branches) == false ]] && branch_refs=(refs/heads)
+
 # fzf over existing worktree branches; --print-query returns a typed-but-unmatched
 # name so we can create it. Falls back to a plain read if fzf isn't on PATH.
 if command -v fzf >/dev/null; then
@@ -36,9 +47,9 @@ if command -v fzf >/dev/null; then
     {
       wt list --format=json 2>/dev/null \
         | jq -r '.[] | select(.branch != null) | .branch'
-      git for-each-ref --format='%(refname:short)' refs/heads refs/remotes 2>/dev/null \
+      git for-each-ref --format='%(refname:short)' "${branch_refs[@]}" 2>/dev/null \
         | grep -v '/HEAD$'
-    } | awk '!seen[$0]++' \
+    } | LC_ALL=C sort -u \
       | fzf --print-query --reverse --info=inline --border=rounded --margin=20%,30% \
             --prompt='worktree ❯ ' \
             --header="↵ on a match → switch · type a new name + ↵ → create from ${create_base_label} · esc → cancel"
@@ -52,11 +63,6 @@ else
 fi
 [[ -z $name ]] && exit 0
 
-plugin_root=${HERDR_PLUGIN_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)}
-# shellcheck source=./config.sh
-source "$plugin_root/config.sh"
-# shellcheck source=./helpers.sh
-source "$plugin_root/helpers.sh"
 open_mode=$(worktrunk_open_mode)
 
 # Existing local or remote-tracking branch → switch (wt creates the worktree if
