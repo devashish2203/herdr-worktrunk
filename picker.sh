@@ -47,8 +47,10 @@ if command -v fzf >/dev/null; then
     {
       wt list --format=json 2>/dev/null \
         | jq -r '.[] | select(.branch != null) | .branch'
-      git for-each-ref --format='%(refname:short)' "${branch_refs[@]}" 2>/dev/null \
-        | grep -v '/HEAD$'
+      # Drop origin/HEAD: its short form is bare "origin", so filter on the full
+      # refname (refs/remotes/origin/HEAD) instead, then emit the short name.
+      git for-each-ref --format='%(refname) %(refname:short)' "${branch_refs[@]}" 2>/dev/null \
+        | awk '$1 !~ /\/HEAD$/ {print $2}'
     } | LC_ALL=C sort -u \
       | fzf --print-query --reverse --info=inline --border=rounded --margin=20%,30% \
             --prompt='worktree ❯ ' \
