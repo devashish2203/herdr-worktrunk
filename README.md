@@ -65,7 +65,10 @@ Supported values:
 
 - `open_mode = "workspace"` — let Worktrunk create or switch the checkout and
   run its hooks, then register that checkout with `herdr worktree open`. Herdr
-  displays it as a nested worktree workspace in the sidebar. This is the default.
+  displays it as a nested worktree workspace in the sidebar. New workspaces
+  preserve your relative directory when it exists in the target checkout (for
+  example, switching from `apps/web` opens the new workspace in `apps/web`).
+  This is the default.
 - `open_mode = "tab"` — open a new tab in the current workspace and run `wt`
   there. This preserves the original plugin behavior.
 
@@ -175,7 +178,7 @@ The plugin is a manifest plus small bash scripts:
 
 - `herdr-plugin.toml` — actions and panes
 - `config.sh` — worktree presentation configuration
-- `helpers.sh` — shared shell helpers (e.g. worktrunk shortcut detection)
+- `helpers.sh` — shared shell helpers (cwd preservation and worktrunk shortcut detection)
 - `picker.sh` — the switch / create picker
 - `remove.sh` — the remove picker + orphaned-pane cleanup
 - `tests/config_test.sh` — configuration parser checks

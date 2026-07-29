@@ -108,8 +108,13 @@ if [[ $open_mode == tab ]]; then
   exit
 fi
 
-# Native workspace mode: let worktrunk create/switch the checkout and run hooks,
-# then register the resulting existing checkout through herdr's worktree API.
+# Native workspace mode: remember where the picker started so the new workspace
+# can mirror that relative subdirectory after Worktrunk creates the checkout.
+source_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)
+source_cwd=$(pwd -P)
+
+# Let Worktrunk create/switch the checkout and run hooks, then register the
+# resulting existing checkout through Herdr's worktree API.
 if ! result=$(wt "${wtargs[@]}" --no-cd --format=json); then
   printf '\n\033[31m%s\033[0m press any key to close' "wt switch failed (see above)."
   read -n1
@@ -136,9 +141,14 @@ fi
 # the checkout never surfaces in the sidebar. herdr resolves the repo's root
 # workspace from any checkout cwd via .result.source.source_workspace_id, so
 # prefer that; fall back to the pane's workspace if it can't be resolved.
-root_ws=$("$herdr" worktree list --cwd "$PWD" --json 2>/dev/null \
+root_ws=$("$herdr" worktree list --cwd "$source_cwd" --json 2>/dev/null \
   | jq -r '.result.source.source_workspace_id // empty')
 [[ -z $root_ws ]] && root_ws=$HERDR_WORKSPACE_ID
 
-exec "$herdr" worktree open --workspace "$root_ws" \
-  --path "$wtpath" --label "$name" --focus --json
+target_cwd=$(worktrunk_preserved_cwd "$wtpath" "$source_root" "$source_cwd")
+if ! worktrunk_open_workspace "$herdr" "$root_ws" "$wtpath" "$name" "$target_cwd"; then
+  printf '\n\033[31m%s\033[0m press any key to close' \
+    "worktree opened, but its workspace cwd could not be set (see above)."
+  read -n1
+  exit 1
+fi
