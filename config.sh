@@ -84,12 +84,14 @@ worktrunk_picker_placement() {
 
 # Set WORKTRUNK_FZF_LAYOUT to the fzf chrome that suits the picker placement. A
 # split pane is full-width, so the picker draws its own inset box to read as a
-# dialog. A popup already is one, and herdr frames it with the pane title.
+# dialog. A popup already is one, and herdr frames it with the pane title. Both
+# are stated outright so a border in the user's FZF_DEFAULT_OPTS can't double up
+# on the frame herdr draws.
 # shellcheck disable=SC2034  # read by the scripts that source this file
 worktrunk_fzf_layout() {
   case $(worktrunk_picker_placement) in
     popup)
-      WORKTRUNK_FZF_LAYOUT=()
+      WORKTRUNK_FZF_LAYOUT=(--border=none --margin=0)
       ;;
     *)
       WORKTRUNK_FZF_LAYOUT=(--border=rounded '--margin=20%,30%')

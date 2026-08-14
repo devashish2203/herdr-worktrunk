@@ -74,6 +74,21 @@ assert_placement split
 printf 'picker_placement = "overlay"\n' > "$config_dir/config.toml"    # unsupported → default
 assert_placement split
 
+assert_fzf_layout() {
+  local expected=$1
+  worktrunk_fzf_layout
+  if [[ "${WORKTRUNK_FZF_LAYOUT[*]}" != "$expected" ]]; then
+    printf 'expected fzf layout %q, got %q\n' "$expected" "${WORKTRUNK_FZF_LAYOUT[*]}" >&2
+    exit 1
+  fi
+}
+
+printf 'picker_placement = "split"\n' > "$config_dir/config.toml"
+assert_fzf_layout '--border=rounded --margin=20%,30%'
+
+printf 'picker_placement = "popup"\n' > "$config_dir/config.toml"
+assert_fzf_layout '--border=none --margin=0'
+
 assert_dimension() {
   local key=$1 expected=$2 actual
   actual=$(worktrunk_popup_dimension "$key" 2>/dev/null)
