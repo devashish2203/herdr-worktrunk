@@ -60,3 +60,60 @@ worktrunk_open_mode() {
       ;;
   esac
 }
+
+# Print how the picker itself is presented: a split pane below the workspace
+# (the default) or a session-modal popup over it. Popups need herdr 0.7.4.
+worktrunk_picker_placement() {
+  local placement
+
+  placement=$(worktrunk_config_value picker_placement)
+
+  case "$placement" in
+    ""|split)
+      printf '%s\n' split
+      ;;
+    popup)
+      printf '%s\n' popup
+      ;;
+    *)
+      printf '\033[33mWarning:\033[0m unsupported picker_placement %q; using split\n' "$placement" >&2
+      printf '%s\n' split
+      ;;
+  esac
+}
+
+# Set WORKTRUNK_FZF_LAYOUT to the fzf chrome that suits the picker placement. A
+# split pane is full-width, so the picker draws its own inset box to read as a
+# dialog. A popup already is one, and herdr frames it with the pane title.
+# shellcheck disable=SC2034  # read by the scripts that source this file
+worktrunk_fzf_layout() {
+  case $(worktrunk_picker_placement) in
+    popup)
+      WORKTRUNK_FZF_LAYOUT=()
+      ;;
+    *)
+      WORKTRUNK_FZF_LAYOUT=(--border=rounded '--margin=20%,30%')
+      ;;
+  esac
+}
+
+# Print the configured popup_width/popup_height, or nothing when unset. herdr
+# takes a popup dimension as terminal cells (24) or a percentage of the window
+# ("80%"), and falls back to a half-size popup when one is omitted. Drop a
+# malformed value rather than passing it on and failing the open.
+worktrunk_popup_dimension() {
+  local key=$1 value
+
+  value=$(worktrunk_config_value "$key")
+
+  case "$value" in
+    "")
+      ;;
+    *[!0-9%]*|*%?*|%*)
+      printf '\033[33mWarning:\033[0m unsupported %s %q; using the default popup size\n' "$key" "$value" >&2
+      ;;
+    *)
+      printf '%s\n' "$value"
+      ;;
+  esac
+}

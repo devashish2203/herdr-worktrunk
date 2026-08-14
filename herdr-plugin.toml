@@ -5,27 +5,25 @@ min_herdr_version = "0.7.0"
 description = "Switch, create, or remove git worktrees via worktrunk"
 platforms = ["macos", "linux"]
 
-# Workspace actions: open the picker in a split pane. Plugin panes default their cwd to
-# the plugin root, so pass --cwd = the workspace's repo (from the injected context JSON);
-# otherwise `wt` runs in the plugin dir, not the repo you're in.
+# Workspace actions: open.sh resolves the workspace's repo and the configured
+# picker placement, then opens the entrypoint named here.
 [[actions]]
 id = "open"
 title = "Worktree: switch / create from default branch"
 contexts = ["workspace"]
-command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint picker-default --placement split --direction down --cwd \"$cwd\" --focus"]
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/open.sh\" picker-default"]
 
 [[actions]]
 id = "open-current"
 title = "Worktree: switch / create from current branch"
 contexts = ["workspace"]
-command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint picker-current --placement split --direction down --cwd \"$cwd\" --focus"]
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/open.sh\" picker-current"]
 
-# Remove action: same split-pane pattern, different entrypoint.
 [[actions]]
 id = "remove"
 title = "Worktree: remove"
 contexts = ["workspace"]
-command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint remover --placement split --direction down --cwd \"$cwd\" --focus"]
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/open.sh\" remover"]
 
 # Both panes run as plain bash. Depending on plugin config, picker.sh opens the
 # checkout in a tab or registers it as a native herdr worktree workspace.

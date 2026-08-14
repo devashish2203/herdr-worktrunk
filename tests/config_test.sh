@@ -53,4 +53,48 @@ assert_remote false
 printf 'show_remote_branches = maybe\n' > "$config_dir/config.toml"   # unsupported → default
 assert_remote false
 
+assert_placement() {
+  local expected=$1 actual
+  actual=$(worktrunk_picker_placement 2>/dev/null)
+  if [[ $actual != "$expected" ]]; then
+    printf 'expected picker_placement %q, got %q\n' "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
+printf 'open_mode = "tab"\n' > "$config_dir/config.toml"   # unrelated key → default
+assert_placement split
+
+printf 'picker_placement = "popup"\n' > "$config_dir/config.toml"
+assert_placement popup
+
+printf 'picker_placement = split\n' > "$config_dir/config.toml"        # bare TOML also ok
+assert_placement split
+
+printf 'picker_placement = "overlay"\n' > "$config_dir/config.toml"    # unsupported → default
+assert_placement split
+
+assert_dimension() {
+  local key=$1 expected=$2 actual
+  actual=$(worktrunk_popup_dimension "$key" 2>/dev/null)
+  if [[ $actual != "$expected" ]]; then
+    printf 'expected %s %q, got %q\n' "$key" "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
+printf 'picker_placement = "popup"\n' > "$config_dir/config.toml"      # unset → herdr's default
+assert_dimension popup_width ""
+assert_dimension popup_height ""
+
+printf 'popup_width = "80%%"\npopup_height = 24\n' > "$config_dir/config.toml"
+assert_dimension popup_width "80%"
+assert_dimension popup_height 24
+
+printf 'popup_width = "80 %%"\n' > "$config_dir/config.toml"           # malformed → dropped
+assert_dimension popup_width ""
+
+printf 'popup_height = "%%50"\n' > "$config_dir/config.toml"           # malformed → dropped
+assert_dimension popup_height ""
+
 printf 'config tests passed\n'

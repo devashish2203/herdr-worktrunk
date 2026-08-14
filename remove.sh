@@ -8,8 +8,12 @@ if ! command -v fzf >/dev/null; then
 fi
 
 plugin_root=${HERDR_PLUGIN_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)}
+# shellcheck source=./config.sh
+source "$plugin_root/config.sh"
 # shellcheck source=./helpers.sh
 source "$plugin_root/helpers.sh"
+
+worktrunk_fzf_layout
 
 herdr=${HERDR_BIN_PATH:-herdr}
 if ! wtjson=$(wt list --format=json 2>/dev/null); then
@@ -28,7 +32,7 @@ if [[ -z $cands ]]; then
 fi
 
 name=$(printf '%s\n' "$cands" \
-  | fzf --reverse --info=inline --border=rounded --margin=20%,30% \
+  | fzf --reverse --info=inline "${WORKTRUNK_FZF_LAYOUT[@]}" \
         --prompt='remove worktree ❯ ' \
         --header='↵ to remove (worktrunk will ask to confirm) · esc to cancel')
 [[ -z $name ]] && exit 0      # esc / no selection → cancel

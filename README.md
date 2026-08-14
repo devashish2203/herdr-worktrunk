@@ -84,6 +84,35 @@ show_remote_branches = true
 
 Local branches without worktrees always appear regardless of this setting.
 
+## Picker presentation
+
+The picker opens in a split pane below the workspace. To open it as a
+session-modal popup over the current layout instead, set `picker_placement` in
+the same `config.toml`:
+
+```toml
+picker_placement = "popup"
+```
+
+Supported values:
+
+- `picker_placement = "split"` — a pane split below the workspace, closed when
+  the picker exits. This is the default.
+- `picker_placement = "popup"` — a floating terminal centered over the tab,
+  leaving the tiled layout alone. Needs herdr ≥ 0.7.4.
+
+A popup is half the window by default. Size it with `popup_width` and
+`popup_height`, either as terminal cells or as a percentage of the window:
+
+```toml
+picker_placement = "popup"
+popup_width = "70%"
+popup_height = 24
+```
+
+In a split the picker draws its own rounded border and inset margin, which a
+popup does not need, so the list fills the popup frame herdr already draws.
+
 ## Requirements
 
 - [**herdr**](https://herdr.dev) ≥ 0.7.0
@@ -174,12 +203,14 @@ herdr server reload-config
 The plugin is a manifest plus small bash scripts:
 
 - `herdr-plugin.toml` — actions and panes
-- `config.sh` — worktree presentation configuration
+- `config.sh` — worktree and picker presentation configuration
 - `helpers.sh` — shared shell helpers (e.g. worktrunk shortcut detection)
+- `open.sh` — the action entrypoint that opens a picker in its configured placement
 - `picker.sh` — the switch / create picker
 - `remove.sh` — the remove picker + orphaned-pane cleanup
 - `tests/config_test.sh` — configuration parser checks
 - `tests/helpers_test.sh` — helper function checks
+- `tests/open_test.sh` — picker placement / open argument checks
 
 herdr caches the manifest when a plugin is linked, so after editing
 `herdr-plugin.toml` you must relink for changes to take effect:

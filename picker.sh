@@ -40,6 +40,8 @@ source "$plugin_root/helpers.sh"
 branch_refs=(refs/heads refs/remotes)
 [[ $(worktrunk_show_remote_branches) == false ]] && branch_refs=(refs/heads)
 
+worktrunk_fzf_layout
+
 # fzf over existing worktree branches; --print-query returns a typed-but-unmatched
 # name so we can create it. Falls back to a plain read if fzf isn't on PATH.
 if command -v fzf >/dev/null; then
@@ -53,7 +55,7 @@ if command -v fzf >/dev/null; then
       git for-each-ref --format='%(refname) %(refname:short)' "${branch_refs[@]}" 2>/dev/null \
         | awk '$1 !~ /\/HEAD$/ {print $2}'
     } | LC_ALL=C sort -u \
-      | fzf --print-query --reverse --info=inline --border=rounded --margin=20%,30% \
+      | fzf --print-query --reverse --info=inline "${WORKTRUNK_FZF_LAYOUT[@]}" \
             --prompt='worktree ❯ ' \
             --header="↵ on a match → switch · type a new name + ↵ → create from ${create_base_label} · esc → cancel"
   )
