@@ -101,13 +101,25 @@ if [[ $open_mode == tab ]]; then
     wtcmd="wt switch $quoted_name"
   fi
 
-  newpane=$("$herdr" tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$PWD" --label "$name" --focus \
-    | jq -r '.result.root_pane.pane_id')
+  tab_json=$("$herdr" tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$PWD" --label "$name" \
+    --env "WT_PICKER_NAME=$name" --focus)
+  newpane=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.pane_id')
+  tab_id=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.tab_id')
   [[ -z $newpane ]] && { printf '\033[31m%s\033[0m\n' "failed to open worktree tab"; sleep 2; exit 1; }
+
+  # $name may be a worktrunk shortcut (^, -, pr:N, mr:N, a PR/MR URL) rather than the
+  # actual branch, so the tab label above is a placeholder. Once the switch lands,
+  # relabel with the real branch it resolved to, keeping the typed name alongside in
+  # parens (e.g. "feat/eager-worktree-focus (pr:16)") when it differs.
+  printf -v quoted_herdr '%q' "$herdr"
+  printf -v quoted_tab_id '%q' "$tab_id"
+  relabel_cmd='branch=$(git branch --show-current)'
+  relabel_cmd+='; [ "$branch" = "$WT_PICKER_NAME" ] && label=$branch || label="$branch ($WT_PICKER_NAME)"'
+  relabel_cmd+="; $quoted_herdr tab rename $quoted_tab_id \"\$label\""
 
   # pane run sends the command to the tab's interactive shell; the terminal buffers it
   # until the shell finishes loading, so its `wt` function is in place when it runs.
-  "$herdr" pane run "$newpane" "$wtcmd"
+  "$herdr" pane run "$newpane" "$wtcmd && $relabel_cmd"
   exit
 fi
 
@@ -117,6 +129,16 @@ if ! result=$(wt "${wtargs[@]}" --no-cd --format=json); then
   printf '\n\033[31m%s\033[0m press any key to close' "wt switch failed (see above)."
   read -n1
   exit 1
+fi
+
+# $name may be a worktrunk shortcut (^, -, pr:N, mr:N, a PR/MR URL) rather than the
+# actual branch, so use what it resolved to for the label, keeping the typed name
+# alongside in parens (e.g. "feat/eager-worktree-focus (pr:16)") when it differs.
+label=$(printf '%s\n' "$result" | jq -r '.branch // empty' 2>/dev/null)
+if [[ -z $label ]]; then
+  label=$name
+elif [[ $label != "$name" ]]; then
+  label="$label ($name)"
 fi
 
 wtpath=$(printf '%s\n' "$result" | jq -r '.path // empty' 2>/dev/null)
@@ -137,8 +159,29 @@ fi
 # workspace, $HERDR_WORKSPACE_ID is that worktree's own (linked-worktree)
 # workspace, which `worktree open` rejects. Resolve the repository root instead;
 # Herdr reuses its parent workspace or creates one when absent.
-repo_root=$("$herdr" worktree list --cwd "$PWD" --json 2>/dev/null \
-  | jq -r '.result.source.repo_root')
+source_json=$("$herdr" worktree list --cwd "$PWD" --json 2>/dev/null)
+repo_root=$(printf '%s\n' "$source_json" | jq -r '.result.source.repo_root')
+
+# When no workspace covers the root yet, herdr's own auto-created label falls back
+# to the checkout directory's basename verbatim (e.g. "repo.git" for a bare repo)
+# rather than the repository's name. Pre-create it labeled correctly so the
+# `worktree open` below reuses it as-is instead of defaulting the label.
+root_workspace_id=$(printf '%s\n' "$source_json" | jq -r '.result.source.source_workspace_id // empty')
+if [[ -z $root_workspace_id ]]; then
+  repo_label=$(printf '%s\n' "$source_json" | jq -r '.result.source.repo_name // empty')
+  repo_label=${repo_label%.git}
+  [[ -n $repo_label ]] && "$herdr" workspace create --cwd "$repo_root" --label "$repo_label" --no-focus >/dev/null
+fi
+
+# Picking the main/root branch itself resolves wtpath to repo_root — there's no
+# separate linked-worktree workspace to label, it's the repo's own workspace.
+# Passing --label here would rename that workspace to the branch (e.g. "main"),
+# clobbering the repo-name label set above. Compare canonicalized paths since
+# repo_root and wtpath may resolve symlinks differently (e.g. macOS /tmp).
+label_args=(--label "$label")
+if [[ "$(cd "$wtpath" 2>/dev/null && pwd -P)" == "$(cd "$repo_root" 2>/dev/null && pwd -P)" ]]; then
+  label_args=()
+fi
 
 exec "$herdr" worktree open --cwd "$repo_root" \
-  --path "$wtpath" --label "$name" --focus --json
+  --path "$wtpath" "${label_args[@]}" --focus --json
