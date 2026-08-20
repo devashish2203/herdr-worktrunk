@@ -45,7 +45,9 @@ fi
 worktrunk_fzf_layout
 
 # fzf over existing worktree branches; --print-query returns a typed-but-unmatched
-# name so we can create it. Falls back to a plain read if fzf isn't on PATH.
+# name so we can create it, and alt-↵ (print-query) forces the typed name even when
+# it fuzzy-matches an existing branch (fzf then prints only the query, so the
+# last-line parse below lands on it). Falls back to a plain read if fzf isn't on PATH.
 if command -v fzf >/dev/null; then
   choice=$(
     {
@@ -58,8 +60,9 @@ if command -v fzf >/dev/null; then
         | awk '$1 !~ /\/HEAD$/ {print $2}'
     } | LC_ALL=C sort -u \
       | fzf --print-query --reverse --info=inline "${WORKTRUNK_FZF_LAYOUT[@]}" \
+            --bind=alt-enter:print-query \
             --prompt='worktree ❯ ' \
-            --header="↵ on a match → switch · type a new name + ↵ → create from ${create_base_label} · esc → cancel"
+            --header="↵ on a match → switch · type a new name + ↵ → create from ${create_base_label} · alt-↵ → force typed name · esc → cancel"
   )
   ret=$?
   [[ $ret -gt 1 ]] && exit 0      # 130 = esc/abort → cancel (0 = picked, 1 = typed-new)

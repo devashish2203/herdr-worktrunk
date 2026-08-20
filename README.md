@@ -28,7 +28,9 @@ Four workspace actions:
   your existing worktrees and local branches without worktrees (remote-tracking
   branches too, if enabled — see [Remote branches in the picker](#remote-branches-in-the-picker)).
   Press `Enter` on a match to switch to it, or type a new name and press `Enter`
-  to create it from worktrunk's default base branch.
+  to create it from worktrunk's default base branch. When the name you want
+  fuzzy-matches an existing branch (e.g. you want `pgx` but `pgx-bump` exists),
+  press `Alt+Enter` to force the typed name instead of the highlighted match.
 
 - **Worktree: switch / create from current branch** — the same picker, but typed
   new branch names are created with `wt switch --create --base @`, i.e. from the
