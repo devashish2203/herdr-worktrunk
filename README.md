@@ -73,6 +73,15 @@ Supported values:
   displays it as a nested worktree workspace in the sidebar. This is the default.
 - `open_mode = "tab"` — open a new tab in the current workspace and run `wt`
   there. This preserves the original plugin behavior.
+- `open_mode = "workspace-flat"` — same as `workspace`, but register the
+  checkout with `herdr workspace create --cwd` instead of `herdr worktree open`.
+  Herdr then shows it as an ordinary top-level workspace with its branch on the
+  second sidebar line, the way worktrees created by hand with `git worktree add`
+  appear, rather than as a nested row under the repository's workspace. Picking
+  the main checkout focuses the repository workspace instead of duplicating it,
+  and a checkout that already has a workspace is focused rather than recreated.
+  Note that herdr does not track these worktrees, so `herdr worktree remove`
+  does not apply — remove them with this plugin (`wt remove`) or by hand.
 
 The config file is read each time the picker runs, so changing the mode does
 not require reinstalling or reloading the plugin.

@@ -29,6 +29,9 @@ assert_mode tab
 printf 'open_mode = "workspace" # native worktree workspace\n' > "$config_dir/config.toml"
 assert_mode workspace
 
+printf 'open_mode = "workspace-flat"\n' > "$config_dir/config.toml"
+assert_mode workspace-flat
+
 printf 'open_mode = "unsupported"\n' > "$config_dir/config.toml"
 assert_mode workspace
 

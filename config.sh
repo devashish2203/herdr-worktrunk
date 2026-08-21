@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # Print the configured worktree presentation mode. Native workspace mode is the
-# default; set open_mode = "tab" to keep the original tab-based behavior.
+# default; set open_mode = "tab" to keep the original tab-based behavior, or
+# open_mode = "workspace-flat" for a top-level workspace per worktree.
 worktrunk_config_value() {
   local key=$1 config_file
 
@@ -53,6 +54,9 @@ worktrunk_open_mode() {
       ;;
     tab)
       printf '%s\n' tab
+      ;;
+    workspace-flat)
+      printf '%s\n' workspace-flat
       ;;
     *)
       printf '\033[33mWarning:\033[0m unsupported open_mode %q; using workspace\n' "$mode" >&2

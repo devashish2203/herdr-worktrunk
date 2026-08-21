@@ -188,5 +188,28 @@ if [[ "$(cd "$wtpath" 2>/dev/null && pwd -P)" == "$(cd "$repo_root" 2>/dev/null 
   label_args=()
 fi
 
+# Flat mode: register the checkout as an ordinary top-level workspace instead of
+# a linked-worktree workspace. herdr nests the latter under the repo's workspace
+# and renders a single label row; a plain workspace gets its own row with the
+# branch line, matching worktrees made by hand with `git worktree add`.
+if [[ $open_mode == workspace-flat ]]; then
+  # The main checkout already owns the repo workspace — focus it, never duplicate.
+  if [[ ${#label_args[@]} -eq 0 ]]; then
+    [[ -n $root_workspace_id ]] && exec "$herdr" workspace focus "$root_workspace_id"
+    exec "$herdr" workspace create --cwd "$wtpath" --focus
+  fi
+
+  # Reuse the workspace already covering this checkout, if any. Flat workspaces
+  # carry no worktree metadata, so match on pane cwd (canonicalized, since
+  # herdr reports resolved paths such as /private/tmp for macOS /tmp).
+  wtpath_real=$(cd "$wtpath" 2>/dev/null && pwd -P)
+  existing_id=$("$herdr" pane list 2>/dev/null \
+    | jq -r --arg p "$wtpath_real" '.result.panes[]? | select(.cwd == $p) | .workspace_id' \
+    | head -n1)
+  [[ -n $existing_id ]] && exec "$herdr" workspace focus "$existing_id"
+
+  exec "$herdr" workspace create --cwd "$wtpath" "${label_args[@]}" --focus
+fi
+
 exec "$herdr" worktree open --cwd "$repo_root" \
   --path "$wtpath" "${label_args[@]}" --focus --json
