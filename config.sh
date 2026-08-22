@@ -119,3 +119,30 @@ worktrunk_popup_dimension() {
       ;;
   esac
 }
+
+# Print the extra flags to pass to `wt merge`, one per line, from the
+# whitespace-separated merge_flags value. Only flags that leave the merger's own
+# contract intact are accepted: -C, --no-remove and --format are the merger's to
+# set — it removes the worktree in a second step so it can close herdr's workspace
+# afterwards — and an unrecognized flag is dropped rather than handed to wt as a
+# broken argv. --yes is excluded on purpose: hook approval is the user's call.
+worktrunk_merge_flags() {
+  local value flag
+
+  value=$(worktrunk_config_value merge_flags)
+
+  # shellcheck disable=SC2086  # whitespace-separated flags, split on purpose
+  for flag in $value; do
+    case "$flag" in
+      --no-squash|--no-rebase|--no-ff|--no-commit|--no-hooks)
+        printf '%s\n' "$flag"
+        ;;
+      --stage=all|--stage=tracked|--stage=none)
+        printf '%s\n' "$flag"
+        ;;
+      *)
+        printf '\033[33mWarning:\033[0m unsupported merge_flags entry %q; ignoring it\n' "$flag" >&2
+        ;;
+    esac
+  done
+}

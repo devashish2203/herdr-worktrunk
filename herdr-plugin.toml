@@ -2,7 +2,7 @@ id = "worktrunk"
 name = "Worktrunk"
 version = "0.1.0"
 min_herdr_version = "0.7.0"
-description = "Switch, create, or remove git worktrees via worktrunk"
+description = "Switch, create, remove, or merge git worktrees via worktrunk"
 platforms = ["macos", "linux"]
 # Workspace actions: open.sh resolves the workspace's repo and the configured
 # picker placement, then opens the entrypoint named here.
@@ -30,6 +30,18 @@ title = "Worktree: remove"
 contexts = ["workspace"]
 command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/open.sh\" remover"]
 
+[[actions]]
+id = "merge"
+title = "Worktree: merge into the target branch"
+contexts = ["workspace"]
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/open.sh\" merger"]
+
+[[actions]]
+id = "merge-no-squash"
+title = "Worktree: merge into the target branch, keeping every commit"
+contexts = ["workspace"]
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/open.sh\" merger-no-squash"]
+
 # Both panes run as plain bash. Depending on plugin config, picker.sh opens the
 # checkout in a tab or registers it as a native herdr worktree workspace.
 [[panes]]
@@ -55,3 +67,15 @@ id = "remover"
 title = "Worktrunk — remove"
 placement = "split"
 command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/remove.sh\""]
+
+[[panes]]
+id = "merger"
+title = "Worktrunk — merge"
+placement = "split"
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/merge.sh\""]
+
+[[panes]]
+id = "merger-no-squash"
+title = "Worktrunk — merge (no squash)"
+placement = "split"
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/merge.sh\" --no-squash"]

@@ -112,4 +112,31 @@ assert_dimension popup_width ""
 printf 'popup_height = "%%50"\n' > "$config_dir/config.toml"           # malformed → dropped
 assert_dimension popup_height ""
 
+assert_merge_flags() {
+  local expected=$1 actual
+  actual=$(worktrunk_merge_flags 2>/dev/null | tr '\n' ' ')
+  actual=${actual% }
+  if [[ $actual != "$expected" ]]; then
+    printf 'expected merge_flags %q, got %q\n' "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
+printf 'open_mode = "tab"\n' > "$config_dir/config.toml"   # unrelated key → no flags
+assert_merge_flags ""
+
+printf 'merge_flags = "--no-squash"\n' > "$config_dir/config.toml"
+assert_merge_flags "--no-squash"
+
+printf 'merge_flags = "--no-squash --no-rebase --stage=tracked"\n' > "$config_dir/config.toml"
+assert_merge_flags "--no-squash --no-rebase --stage=tracked"
+
+# Unrecognized entries are dropped, the rest still pass through.
+printf 'merge_flags = "--no-squash --wat --stage=some"\n' > "$config_dir/config.toml"
+assert_merge_flags "--no-squash"
+
+# Flags the merger owns can't be overridden from config.
+printf 'merge_flags = "--no-remove --format=json -C /tmp --yes"\n' > "$config_dir/config.toml"
+assert_merge_flags ""
+
 printf 'config tests passed\n'

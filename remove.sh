@@ -12,38 +12,26 @@ plugin_root=${HERDR_PLUGIN_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && 
 source "$plugin_root/config.sh"
 # shellcheck source=./helpers.sh
 source "$plugin_root/helpers.sh"
+# shellcheck source=./lifecycle.sh
+source "$plugin_root/lifecycle.sh"
 
 worktrunk_fzf_layout
 
-herdr=${HERDR_BIN_PATH:-herdr}
-if ! wtjson=$(wt list --format=json 2>/dev/null); then
-  printf '\033[31m%s\033[0m\n' "failed to list worktrees"; sleep 2; exit 1
-fi
-if ! wtitems=$(printf '%s\n' "$wtjson" | worktrunk_list_items); then
-  printf '\033[31m%s\033[0m\n' "unsupported worktrunk list output"; sleep 2; exit 1
-fi
+wtitems=$(worktrunk_worktree_items) || exit 1
 
-# Removable = any real worktree except the main one (the primary checkout can't be
-# removed). The current worktree IS removable — wt switches you back to the root repo.
-cands=$(printf '%s\n' "$wtitems" \
-  | jq -r 'select(.kind == "worktree" and .branch != null and .is_main != true) | .branch')
+cands=$(printf '%s\n' "$wtitems" | worktrunk_worktree_branches)
 if [[ -z $cands ]]; then
   printf '\033[33m%s\033[0m\n' "No removable worktrees (only the main worktree exists)."; sleep 2; exit 0
 fi
 
 name=$(printf '%s\n' "$cands" \
-  | fzf --reverse --info=inline "${WORKTRUNK_FZF_LAYOUT[@]}" \
-        --prompt='remove worktree ❯ ' \
-        --header='↵ to remove (worktrunk will ask to confirm) · esc to cancel')
+  | worktrunk_pick_branch 'remove worktree ❯ ' \
+      '↵ to remove (worktrunk will ask to confirm) · esc to cancel')
 [[ -z $name ]] && exit 0      # esc / no selection → cancel
 
 # Path and native herdr workspace (if open) of the worktree we're about to remove.
-wtpath=$(printf '%s\n' "$wtitems" \
-  | jq -r --arg b "$name" 'select(.kind == "worktree" and .branch == $b) | .path')
-wsid=$("$herdr" worktree list --cwd "$PWD" --json 2>/dev/null \
-  | jq -r --arg p "$wtpath" \
-      '.result.worktrees[] | select(.path == $p) | .open_workspace_id // empty' \
-  | head -n1)
+wtpath=$(printf '%s\n' "$wtitems" | worktrunk_worktree_path "$name")
+wsid=$(worktrunk_open_workspace_id "$wtpath")
 
 # wt remove prompts for approval itself, refuses unmerged branches without -D, and
 # refuses worktrees with untracked files without -f — so run it interactively and let
@@ -53,14 +41,4 @@ if ! wt remove --foreground "$name"; then
   exit 0
 fi
 
-# Close a native worktree workspace as a unit. Fall back to pane cleanup for the
-# original tab-based mode and worktrees opened by older plugin versions.
-if [[ -n $wsid ]]; then
-  "$herdr" workspace close "$wsid"
-elif [[ -n $wtpath && $wtpath != "/" ]]; then
-  "$herdr" pane list 2>/dev/null \
-    | jq -r --arg p "$wtpath" --arg self "${HERDR_PANE_ID:-}" \
-        '.result.panes[] | select(.pane_id != $self)
-         | select(.cwd == $p or (.cwd | startswith($p + "/"))) | .pane_id' \
-    | while read -r pid; do "$herdr" pane close "$pid"; done
-fi
+worktrunk_close_worktree_ui "$wsid" "$wtpath"

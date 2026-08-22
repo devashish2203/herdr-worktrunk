@@ -1,7 +1,7 @@
 # Worktrunk
 
-A [herdr](https://herdr.dev) plugin for switching, creating, and removing git
-worktrees through [worktrunk](https://github.com/max-sixty/worktrunk). Pick (or
+A [herdr](https://herdr.dev) plugin for switching, creating, merging, and
+removing git worktrees through [worktrunk](https://github.com/max-sixty/worktrunk). Pick (or
 type) a branch in an fzf picker and open the worktree as a herdr tab or a native
 worktree workspace — with worktrunk's hooks running along the way.
 
@@ -22,7 +22,7 @@ resulting worktree opens as a tab or as a native linked-worktree workspace.
 
 ## What it does
 
-Four workspace actions:
+Six workspace actions:
 
 - **Worktree: switch / create from default branch** — opens an fzf picker over
   your existing worktrees and local branches without worktrees (remote-tracking
@@ -48,6 +48,13 @@ opens as a tab or a native worktree workspace according to plugin configuration.
   confirmation and gates unmerged branches / untracked files itself, then
   removes it. The native workspace or any legacy tab panes associated with the
   deleted worktree are closed automatically.
+
+- **Worktree: merge into the target branch** — the same picker over removable
+  worktrees, then `wt merge` on the one you pick, then removal. The native
+  workspace or legacy tab panes are closed once the worktree is gone.
+
+- **Worktree: merge into the target branch, keeping every commit** — the same
+  merge with `--no-squash`. See [Merge flags](#merge-flags) for the rest.
 
 ## Worktree presentation
 
@@ -88,6 +95,22 @@ show_remote_branches = true
 ```
 
 Local branches without worktrees always appear regardless of this setting.
+
+## Merge flags
+
+The merge actions pass no flags to `wt merge` beyond the variant's `--no-squash`.
+To change what every merge does, list flags in `merge_flags` in the same
+`config.toml`:
+
+```toml
+merge_flags = "--no-squash --no-rebase"
+```
+
+Accepted: `--no-squash`, `--no-rebase`, `--no-ff`, `--no-commit`, `--no-hooks`,
+`--stage=all|tracked|none` (see `wt merge --help`).
+
+A merge that fails leaves the worktree and its workspace alone, with worktrunk's
+output on screen.
 
 ## Picker presentation
 
@@ -204,6 +227,12 @@ key = "prefix+shift+d"
 type = "plugin_action"
 command = "worktrunk.remove"
 description = "Worktree: remove"
+
+[[keys.command]]
+key = "prefix+shift+m"
+type = "plugin_action"
+command = "worktrunk.merge"
+description = "Worktree: merge into the target branch"
 ```
 
 **Recommended:** override herdr's built-in worktree management with these. herdr
@@ -211,8 +240,8 @@ binds `prefix+shift+g` to "new worktree" by default, and a custom keybinding tak
 precedence over the built-in on the same key — so mapping `worktrunk.open`
 to `prefix+shift+g` replaces it with worktrunk's switch/create picker, hooks
 included. Pick matching keys for `worktrunk.open-current`,
-`worktrunk.open-with-remotes`, and `worktrunk.remove`
-to round out the workflow.
+`worktrunk.open-with-remotes`, `worktrunk.remove`, `worktrunk.merge`, and
+`worktrunk.merge-no-squash` to round out the workflow.
 
 Reload the config after editing it:
 
@@ -229,9 +258,14 @@ The plugin is a manifest plus small bash scripts:
 - `helpers.sh` — shared shell helpers (e.g. worktrunk shortcut detection)
 - `open.sh` — the action entrypoint that opens a picker in its configured placement
 - `picker.sh` — the switch / create picker
-- `remove.sh` — the remove picker + orphaned-pane cleanup
+- `remove.sh` — the remove picker
+- `merge.sh` — the merge picker
+- `lifecycle.sh` — shared steps for the actions that destroy a worktree:
+  candidate listing, herdr workspace resolution, post-removal UI cleanup
 - `tests/config_test.sh` — configuration parser checks
 - `tests/helpers_test.sh` — helper function checks
+- `tests/lifecycle_test.sh` — candidate/workspace resolution and cleanup checks
+- `tests/merge_test.sh` — merge argument and failure-path checks
 - `tests/open_test.sh` — picker placement / open argument checks
 
 herdr caches the manifest when a plugin is linked, so after editing
