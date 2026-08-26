@@ -99,19 +99,42 @@ worktrunk_fzf_layout() {
   esac
 }
 
-# Print the path of the user's post-create hook script when one exists in the
-# plugin's managed config directory, or nothing. The script runs inside a
-# worktree the picker just created; per-project behavior belongs in the script
-# itself (branch on WORKTRUNK_MAIN_PATH or the repo's remote URL).
-worktrunk_post_create_hook() {
-  local hook
+# Print the path of a user-provided file when one exists in the plugin's
+# managed config directory, or nothing.
+worktrunk_user_file() {
+  local file
 
   if [[ -z ${HERDR_PLUGIN_CONFIG_DIR:-} ]]; then
     return
   fi
 
-  hook="$HERDR_PLUGIN_CONFIG_DIR/post-create.sh"
-  if [[ -f $hook ]]; then
+  file="$HERDR_PLUGIN_CONFIG_DIR/$1"
+  if [[ -f $file ]]; then
+    printf '%s\n' "$file"
+  fi
+}
+
+# The post-create hook runs inside a worktree the picker just created, before
+# it opens; per-project behavior belongs in the script itself (branch on
+# WORKTRUNK_MAIN_PATH or the repo's remote URL).
+worktrunk_post_create_hook() {
+  worktrunk_user_file post-create.sh
+}
+
+# The post-open hook runs after a freshly created worktree's workspace (or tab)
+# is open, with the herdr workspace/tab/pane ids exported, so it can lay out
+# the tab — split panes, start dev servers, launch an agent — via the herdr CLI.
+# A user post-open.sh script takes full control; without one, a declarative
+# layout.toml is applied by the plugin's own applier instead.
+worktrunk_post_open_hook() {
+  local hook
+
+  hook=$(worktrunk_user_file post-open.sh)
+  if [[ -z $hook && -n $(worktrunk_user_file layout.toml) ]]; then
+    hook="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/apply-layout.sh"
+  fi
+
+  if [[ -n $hook ]]; then
     printf '%s\n' "$hook"
   fi
 }

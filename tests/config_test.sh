@@ -113,18 +113,30 @@ printf 'popup_height = "%%50"\n' > "$config_dir/config.toml"           # malform
 assert_dimension popup_height ""
 
 assert_hook() {
-  local expected=$1 actual
-  actual=$(worktrunk_post_create_hook 2>/dev/null)
+  local fn=$1 expected=$2 actual
+  actual=$("$fn" 2>/dev/null)
   if [[ $actual != "$expected" ]]; then
-    printf 'expected post-create hook %q, got %q\n' "$expected" "$actual" >&2
+    printf 'expected %s %q, got %q\n' "$fn" "$expected" "$actual" >&2
     exit 1
   fi
 }
 
-(unset HERDR_PLUGIN_CONFIG_DIR; assert_hook "")   # no config dir → disabled
-assert_hook ""                                    # no script → disabled
+(unset HERDR_PLUGIN_CONFIG_DIR
+  assert_hook worktrunk_post_create_hook ""       # no config dir → disabled
+  assert_hook worktrunk_post_open_hook "")
+assert_hook worktrunk_post_create_hook ""         # no script → disabled
+assert_hook worktrunk_post_open_hook ""
 
 printf '#!/bin/sh\necho hi\n' > "$config_dir/post-create.sh"
-assert_hook "$config_dir/post-create.sh"
+assert_hook worktrunk_post_create_hook "$config_dir/post-create.sh"
+assert_hook worktrunk_post_open_hook ""           # each hook found independently
+
+# A layout.toml alone routes the post-open phase to the plugin's applier …
+printf '[[layout]]\n' > "$config_dir/layout.toml"
+assert_hook worktrunk_post_open_hook "$repo_root/apply-layout.sh"
+
+# … and a user post-open.sh script takes precedence over it.
+printf '#!/bin/sh\necho hi\n' > "$config_dir/post-open.sh"
+assert_hook worktrunk_post_open_hook "$config_dir/post-open.sh"
 
 printf 'config tests passed\n'

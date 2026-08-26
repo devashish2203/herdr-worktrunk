@@ -22,7 +22,7 @@ snap=$work/snapshot
 hook=$work/hook.sh
 
 run_in_linked() {
-  (cd "$work/linked" && bash "$repo_root/post-create.sh" "$snap" "$hook")
+  (cd "$work/linked" && bash "$repo_root/run-hook.sh" "$snap" "$hook" post-create)
 }
 
 # Worktree already in the snapshot → pre-existing checkout: the hook must
@@ -50,7 +50,7 @@ run_in_linked >/dev/null
 actual=$(cat "$work/linked/env-out")
 expected="$linked_phys|feature|$repo_phys"
 if [[ $actual != "$expected" ]]; then
-  printf 'unexpected post-create env %q, expected %q\n' "$actual" "$expected" >&2
+  printf 'unexpected hook env %q, expected %q\n' "$actual" "$expected" >&2
   exit 1
 fi
 if [[ -e $snap ]]; then
@@ -68,15 +68,32 @@ if [[ $(cat "$work/linked/exec-out") != "$hook" ]]; then
   exit 1
 fi
 
-# A failing hook propagates its exit status to the caller.
+# A failing hook propagates its exit status to the caller, and the failure
+# message carries the hook's name.
 printf 'exit 7\n' > "$hook"
 chmod -x "$hook"
 printf '%s\n' "$repo_phys" > "$snap"
 status=0
-run_in_linked >/dev/null 2>&1 || status=$?
+output=$( (cd "$work/linked" && bash "$repo_root/run-hook.sh" "$snap" "$hook" post-open) 2>&1 ) \
+  || status=$?
 if [[ $status != 7 ]]; then
   printf 'expected exit status 7 from a failing hook, got %q\n' "$status" >&2
   exit 1
 fi
+if [[ $output != *"post-open hook failed"* ]]; then
+  printf 'failure message missing the hook name: %q\n' "$output" >&2
+  exit 1
+fi
 
-printf 'post-create tests passed\n'
+# The post-open invocation passes the caller's herdr ids through to the hook.
+printf 'printf "%%s|%%s|%%s" "$WORKTRUNK_WORKSPACE_ID" "$WORKTRUNK_TAB_ID" "$WORKTRUNK_PANE_ID" > id-out\n' > "$hook"
+printf '%s\n' "$repo_phys" > "$snap"
+(cd "$work/linked" \
+  && WORKTRUNK_WORKSPACE_ID=ws-1 WORKTRUNK_TAB_ID=tab-2 WORKTRUNK_PANE_ID=pane-3 \
+     bash "$repo_root/run-hook.sh" "$snap" "$hook" post-open) >/dev/null
+if [[ $(cat "$work/linked/id-out") != "ws-1|tab-2|pane-3" ]]; then
+  printf 'herdr ids were not passed through to the post-open hook\n' >&2
+  exit 1
+fi
+
+printf 'run-hook tests passed\n'

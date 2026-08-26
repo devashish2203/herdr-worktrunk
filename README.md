@@ -139,6 +139,102 @@ repository. For per-repository setup shared with plain `wt` usage outside
 herdr, prefer [worktrunk's own lifecycle hooks](https://worktrunk.dev/hook/) —
 both run when a worktree is created.
 
+## Post-open layout: pre-built tabs and panes
+
+To shape the workspace a freshly created worktree opens into — split panes,
+start the dev server, launch a coding agent, so the tab is ready for feature
+work the moment it appears — drop a declarative `layout.toml` into the same
+managed config directory:
+
+```bash
+config_dir=$(herdr plugin config-dir worktrunk)
+mkdir -p "$config_dir"
+${EDITOR:-vi} "$config_dir/layout.toml"
+```
+
+Like the post-create hook, a layout is applied only when the switch actually
+**created** the worktree, and one file serves every repository — sections are
+picked per project with a `match` glob against the primary checkout path. For
+example: agent on the left, dev server and a spare shell stacked on the right,
+plus a second tab for tests:
+
+```toml
+[[layout]]
+match = "*/my-app"        # first matching section wins; omit match → every repo
+
+[[layout.pane]]           # first pane = the tab's root pane (cwd: the worktree)
+run = "claude"
+
+[[layout.pane]]           # every further pane splits an earlier one
+split = "right"           # right | down
+ratio = 0.4               # optional; herdr's default when omitted
+run = "npm run dev"
+
+[[layout.pane]]
+split = "down"            # splits the previous pane by default …
+of = 2                    # … or name the pane to split (1-based, this tab)
+run = "npm test -- --watch"
+cwd = "packages/web"      # optional; relative to the worktree
+
+[[layout.tab]]            # extra tabs after the main one
+label = "scratch"
+
+[[layout.tab.pane]]       # panes of an extra tab, same rules as above
+run = "git status"
+
+[[layout]]                # fallback for every other repo
+
+[[layout.pane]]
+run = "claude"
+```
+
+Per pane: `split` (required from the second pane of a tab), `ratio`, `of`,
+`run` (a command typed into the pane's shell), and `cwd`. Values are quoted
+strings or bare scalars, one per line — inline tables, arrays, and multi-line
+values aren't supported. A `cwd` on the main tab's root pane becomes a `cd`
+typed into its existing shell. The file is validated before anything is
+applied, so a bad layout fails cleanly instead of leaving half a layout.
+
+In workspace mode the layout lands in the new worktree workspace's root tab;
+in tab mode it lands in the new tab in the current workspace (extra
+`[[layout.tab]]` tabs open in that workspace too, after the post-create hook,
+whose failure doesn't skip the layout). Picking an existing worktree
+re-focuses it without re-applying, so layouts are never duplicated onto a
+workspace that already has one.
+
+### Post-open hook script: full control
+
+When the declarative form isn't enough, drop a `post-open.sh` script into the
+config directory instead — it **replaces** `layout.toml` (the script takes
+full control) and follows the same rules as the post-create hook, but runs
+*after* the worktree's workspace or tab is open, with the herdr ids of the
+freshly opened surface exported on top of the post-create variables:
+
+- `WORKTRUNK_WORKSPACE_ID` — the workspace the worktree opened into
+- `WORKTRUNK_TAB_ID` — its tab
+- `WORKTRUNK_PANE_ID` — the tab's root pane (cwd is the worktree)
+- `HERDR_BIN_PATH` — the herdr binary to drive the layout with
+
+Build the layout with `herdr pane split` / `herdr pane run` / `herdr tab
+create`, branching per project on `WORKTRUNK_MAIN_PATH`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+herdr=${HERDR_BIN_PATH:-herdr}
+
+case $WORKTRUNK_MAIN_PATH in
+  */my-app)
+    # Right column (40%): the dev server.
+    right=$("$herdr" pane split --pane "$WORKTRUNK_PANE_ID" --direction right \
+      --ratio 0.4 --cwd "$WORKTRUNK_WORKTREE_PATH" --no-focus \
+      | jq -r '.result.pane.pane_id')
+    "$herdr" pane run "$right" 'npm run dev'
+    "$herdr" pane run "$WORKTRUNK_PANE_ID" 'claude'
+    ;;
+esac
+```
+
 ## Picker presentation
 
 The picker opens in a split pane below the workspace. To open it as a
@@ -280,11 +376,13 @@ The plugin is a manifest plus small bash scripts:
 - `open.sh` — the action entrypoint that opens a picker in its configured placement
 - `picker.sh` — the switch / create picker
 - `remove.sh` — the remove picker + orphaned-pane cleanup
-- `post-create.sh` — runs the user's post-create hook in a freshly created worktree
+- `run-hook.sh` — runs a user hook (post-create / post-open) in a freshly created worktree
+- `apply-layout.sh` — applies the declarative layout.toml as the built-in post-open hook
 - `tests/config_test.sh` — configuration parser checks
 - `tests/helpers_test.sh` — helper function checks
 - `tests/open_test.sh` — picker placement / open argument checks
-- `tests/post_create_test.sh` — post-create hook gating / env checks
+- `tests/layout_test.sh` — layout.toml parsing / application checks
+- `tests/run_hook_test.sh` — hook gating / env checks
 
 herdr caches the manifest when a plugin is linked, so after editing
 `herdr-plugin.toml` you must relink for changes to take effect:

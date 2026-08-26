@@ -91,16 +91,34 @@ fi
 
 herdr=${HERDR_BIN_PATH:-herdr}
 
-# Snapshot the worktree paths that exist before the switch. post-create.sh runs
-# the user's post-create hook script only for a worktree missing from this
-# snapshot afterwards — i.e. one this switch actually created (a picked branch
-# without a checkout counts; switching to an existing worktree doesn't).
+# Snapshot the worktree paths that exist before the switch. run-hook.sh runs a
+# user hook script only for a worktree missing from its snapshot afterwards —
+# i.e. one this switch actually created (a picked branch without a checkout
+# counts; switching to an existing worktree doesn't). Each hook consumes its
+# own copy, so the post-create and post-open steps gate independently.
 post_create_hook=$(worktrunk_post_create_hook)
+post_open_hook=$(worktrunk_post_open_hook)
 snapshot_file=""
+open_snapshot_file=""
 if [[ -n $post_create_hook ]]; then
   snapshot_file=$(mktemp)
   worktrunk_worktree_paths > "$snapshot_file"
 fi
+if [[ -n $post_open_hook ]]; then
+  open_snapshot_file=$(mktemp)
+  if [[ -n $snapshot_file ]]; then
+    cp "$snapshot_file" "$open_snapshot_file"
+  else
+    worktrunk_worktree_paths > "$open_snapshot_file"
+  fi
+fi
+
+# Failure paths bail before the hook steps consume their snapshots.
+remove_snapshots() {
+  [[ -n $snapshot_file ]] && rm -f "$snapshot_file"
+  [[ -n $open_snapshot_file ]] && rm -f "$open_snapshot_file"
+  return 0
+}
 
 if [[ $open_mode == tab ]]; then
   # Preserve the original behavior: run wt in a new tab's interactive shell so
@@ -122,7 +140,7 @@ if [[ $open_mode == tab ]]; then
   newpane=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.pane_id')
   tab_id=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.tab_id')
   if [[ -z $newpane ]]; then
-    [[ -n $snapshot_file ]] && rm -f "$snapshot_file"
+    remove_snapshots
     printf '\033[31m%s\033[0m\n' "failed to open worktree tab"; sleep 2; exit 1
   fi
 
@@ -138,22 +156,33 @@ if [[ $open_mode == tab ]]; then
 
   # pane run sends the command to the tab's interactive shell; the terminal buffers it
   # until the shell finishes loading, so its `wt` function is in place when it runs.
-  # The hook step runs last, in the worktree the `wt` function cd'd into, so a
+  # The hook steps run last, in the worktree the `wt` function cd'd into, so a
   # long install can't delay the relabel and a failing one leaves its error in
   # the tab without breaking the chain before it.
   post_create_step=""
   if [[ -n $post_create_hook ]]; then
-    printf -v post_create_step ' && bash %q %q %q' \
-      "$plugin_root/post-create.sh" "$snapshot_file" "$post_create_hook"
+    printf -v post_create_step ' && bash %q %q %q post-create' \
+      "$plugin_root/run-hook.sh" "$snapshot_file" "$post_create_hook"
   fi
-  "$herdr" pane run "$newpane" "$wtcmd && $relabel_cmd$post_create_step"
+  # The post-open step is chained with `;` so it always consumes its snapshot:
+  # after a failed switch the cwd is still the old checkout — in the snapshot —
+  # so the hook is skipped, and a failed post-create shouldn't block the layout.
+  post_open_step=""
+  if [[ -n $post_open_hook ]]; then
+    # The tab's shell doesn't inherit the plugin env, so hand the hook the
+    # config dir too (apply-layout.sh reads layout.toml from it).
+    printf -v post_open_step '; HERDR_BIN_PATH=%q HERDR_PLUGIN_CONFIG_DIR=%q WORKTRUNK_WORKSPACE_ID=%q WORKTRUNK_TAB_ID=%q WORKTRUNK_PANE_ID=%q bash %q %q %q post-open' \
+      "$herdr" "${HERDR_PLUGIN_CONFIG_DIR:-}" "$HERDR_WORKSPACE_ID" "$tab_id" "$newpane" \
+      "$plugin_root/run-hook.sh" "$open_snapshot_file" "$post_open_hook"
+  fi
+  "$herdr" pane run "$newpane" "$wtcmd && $relabel_cmd$post_create_step$post_open_step"
   exit
 fi
 
 # Native workspace mode: let worktrunk create/switch the checkout and run hooks,
 # then register the resulting existing checkout through herdr's worktree API.
 if ! result=$(wt "${wtargs[@]}" --no-cd --format=json); then
-  [[ -n $snapshot_file ]] && rm -f "$snapshot_file"
+  remove_snapshots
   printf '\n\033[31m%s\033[0m press any key to close' "wt switch failed (see above)."
   read -n1
   exit 1
@@ -177,7 +206,7 @@ if [[ -z $wtpath ]]; then
     | head -n1)
 fi
 if [[ -z $wtpath ]]; then
-  [[ -n $snapshot_file ]] && rm -f "$snapshot_file"
+  remove_snapshots
   printf '\033[31m%s\033[0m\n' "worktrunk returned no worktree path for: $name"
   sleep 2
   exit 1
@@ -188,7 +217,7 @@ fi
 # failing hook doesn't abort the open — the worktree exists and is usable — but
 # pauses so the error is seen before the pane closes.
 if [[ -n $post_create_hook ]]; then
-  if ! (cd "$wtpath" && bash "$plugin_root/post-create.sh" "$snapshot_file" "$post_create_hook"); then
+  if ! (cd "$wtpath" && bash "$plugin_root/run-hook.sh" "$snapshot_file" "$post_create_hook" post-create); then
     printf '\n\033[33m%s\033[0m press any key to continue' \
       "post-create hook failed (see above); opening the worktree anyway."
     read -n1
@@ -224,5 +253,30 @@ if [[ "$(cd "$wtpath" 2>/dev/null && pwd -P)" == "$(cd "$repo_root" 2>/dev/null 
   label_args=()
 fi
 
-exec "$herdr" worktree open --cwd "$repo_root" \
-  --path "$wtpath" "${label_args[@]}" --focus --json
+if ! open_json=$("$herdr" worktree open --cwd "$repo_root" \
+      --path "$wtpath" "${label_args[@]}" --focus --json); then
+  remove_snapshots
+  printf '%s\n' "$open_json"
+  printf '\n\033[31m%s\033[0m press any key to close' "opening the worktree workspace failed (see above)."
+  read -n1
+  exit 1
+fi
+
+[[ -n $post_open_hook ]] || exit 0
+
+# Run the user's post-open hook inside the checkout when this switch actually
+# created it, with the freshly registered workspace/tab/pane ids exported so
+# the script can lay out the tab — split panes, run dev servers, start an
+# agent — through the herdr CLI before this picker pane closes.
+workspace_id=$(printf '%s\n' "$open_json" | jq -r '.result.workspace.workspace_id // empty')
+tab_id=$(printf '%s\n' "$open_json" | jq -r '.result.tab.tab_id // empty')
+pane_id=$(printf '%s\n' "$open_json" | jq -r '.result.root_pane.pane_id // empty')
+if ! (cd "$wtpath" \
+      && HERDR_BIN_PATH=$herdr WORKTRUNK_WORKSPACE_ID=$workspace_id \
+         WORKTRUNK_TAB_ID=$tab_id WORKTRUNK_PANE_ID=$pane_id \
+         bash "$plugin_root/run-hook.sh" "$open_snapshot_file" "$post_open_hook" post-open); then
+  printf '\n\033[33m%s\033[0m press any key to close' \
+    "post-open hook failed (see above); the worktree workspace is open."
+  read -n1
+  exit 1
+fi
