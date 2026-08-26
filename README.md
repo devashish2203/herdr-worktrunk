@@ -89,6 +89,56 @@ show_remote_branches = true
 
 Local branches without worktrees always appear regardless of this setting.
 
+## Post-create hook
+
+To run setup whenever a pick actually **creates** a worktree — install
+dependencies, copy `.env` files, bootstrap services — drop a `post-create.sh`
+script into the plugin's managed config directory (alongside `config.toml`):
+
+```bash
+config_dir=$(herdr plugin config-dir worktrunk)
+mkdir -p "$config_dir"
+${EDITOR:-vi} "$config_dir/post-create.sh"
+```
+
+The script runs inside the new worktree — executed directly when it's
+executable (honoring its shebang), otherwise with bash — with these variables
+exported:
+
+- `WORKTRUNK_WORKTREE_PATH` — the new worktree (also the working directory)
+- `WORKTRUNK_BRANCH` — its checked-out branch (empty on detached HEAD)
+- `WORKTRUNK_MAIN_PATH` — the repository's primary checkout
+
+One script serves every repository, so filter per project inside it:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+case $WORKTRUNK_MAIN_PATH in
+  */my-app)
+    cp "$WORKTRUNK_MAIN_PATH/.env" .
+    npm install
+    ;;
+  */my-service)
+    cargo fetch
+    ;;
+esac
+```
+
+The hook runs only when the switch created a checkout that didn't exist
+before — picking an existing worktree never re-runs it, while creating a new
+branch, checking out a branch without a worktree, or resolving a `pr:N`
+shortcut to a fresh checkout all do. It works in both presentation modes: in
+workspace mode its output shows in the picker pane before the workspace opens
+(a failure pauses there but still opens the worktree); in tab mode it runs in
+the new tab after the switch, so its output stays visible.
+
+This is a plugin-level hook configured once in herdr, independent of any
+repository. For per-repository setup shared with plain `wt` usage outside
+herdr, prefer [worktrunk's own lifecycle hooks](https://worktrunk.dev/hook/) —
+both run when a worktree is created.
+
 ## Picker presentation
 
 The picker opens in a split pane below the workspace. To open it as a
@@ -230,9 +280,11 @@ The plugin is a manifest plus small bash scripts:
 - `open.sh` — the action entrypoint that opens a picker in its configured placement
 - `picker.sh` — the switch / create picker
 - `remove.sh` — the remove picker + orphaned-pane cleanup
+- `post-create.sh` — runs the user's post-create hook in a freshly created worktree
 - `tests/config_test.sh` — configuration parser checks
 - `tests/helpers_test.sh` — helper function checks
 - `tests/open_test.sh` — picker placement / open argument checks
+- `tests/post_create_test.sh` — post-create hook gating / env checks
 
 herdr caches the manifest when a plugin is linked, so after editing
 `herdr-plugin.toml` you must relink for changes to take effect:

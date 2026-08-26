@@ -91,6 +91,17 @@ fi
 
 herdr=${HERDR_BIN_PATH:-herdr}
 
+# Snapshot the worktree paths that exist before the switch. post-create.sh runs
+# the user's post-create hook script only for a worktree missing from this
+# snapshot afterwards — i.e. one this switch actually created (a picked branch
+# without a checkout counts; switching to an existing worktree doesn't).
+post_create_hook=$(worktrunk_post_create_hook)
+snapshot_file=""
+if [[ -n $post_create_hook ]]; then
+  snapshot_file=$(mktemp)
+  worktrunk_worktree_paths > "$snapshot_file"
+fi
+
 if [[ $open_mode == tab ]]; then
   # Preserve the original behavior: run wt in a new tab's interactive shell so
   # shell integration can cd into the worktree and keep the user there.
@@ -110,7 +121,10 @@ if [[ $open_mode == tab ]]; then
     --env "WT_PICKER_NAME=$name" --focus)
   newpane=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.pane_id')
   tab_id=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.tab_id')
-  [[ -z $newpane ]] && { printf '\033[31m%s\033[0m\n' "failed to open worktree tab"; sleep 2; exit 1; }
+  if [[ -z $newpane ]]; then
+    [[ -n $snapshot_file ]] && rm -f "$snapshot_file"
+    printf '\033[31m%s\033[0m\n' "failed to open worktree tab"; sleep 2; exit 1
+  fi
 
   # $name may be a worktrunk shortcut (^, -, pr:N, mr:N, a PR/MR URL) rather than the
   # actual branch, so the tab label above is a placeholder. Once the switch lands,
@@ -124,13 +138,22 @@ if [[ $open_mode == tab ]]; then
 
   # pane run sends the command to the tab's interactive shell; the terminal buffers it
   # until the shell finishes loading, so its `wt` function is in place when it runs.
-  "$herdr" pane run "$newpane" "$wtcmd && $relabel_cmd"
+  # The hook step runs last, in the worktree the `wt` function cd'd into, so a
+  # long install can't delay the relabel and a failing one leaves its error in
+  # the tab without breaking the chain before it.
+  post_create_step=""
+  if [[ -n $post_create_hook ]]; then
+    printf -v post_create_step ' && bash %q %q %q' \
+      "$plugin_root/post-create.sh" "$snapshot_file" "$post_create_hook"
+  fi
+  "$herdr" pane run "$newpane" "$wtcmd && $relabel_cmd$post_create_step"
   exit
 fi
 
 # Native workspace mode: let worktrunk create/switch the checkout and run hooks,
 # then register the resulting existing checkout through herdr's worktree API.
 if ! result=$(wt "${wtargs[@]}" --no-cd --format=json); then
+  [[ -n $snapshot_file ]] && rm -f "$snapshot_file"
   printf '\n\033[31m%s\033[0m press any key to close' "wt switch failed (see above)."
   read -n1
   exit 1
@@ -154,9 +177,22 @@ if [[ -z $wtpath ]]; then
     | head -n1)
 fi
 if [[ -z $wtpath ]]; then
+  [[ -n $snapshot_file ]] && rm -f "$snapshot_file"
   printf '\033[31m%s\033[0m\n' "worktrunk returned no worktree path for: $name"
   sleep 2
   exit 1
+fi
+
+# Run the user's post-create hook inside the checkout when this switch actually
+# created it, surfacing its output in this pane before the workspace opens. A
+# failing hook doesn't abort the open — the worktree exists and is usable — but
+# pauses so the error is seen before the pane closes.
+if [[ -n $post_create_hook ]]; then
+  if ! (cd "$wtpath" && bash "$plugin_root/post-create.sh" "$snapshot_file" "$post_create_hook"); then
+    printf '\n\033[33m%s\033[0m press any key to continue' \
+      "post-create hook failed (see above); opening the worktree anyway."
+    read -n1
+  fi
 fi
 
 # Register the worktree under the repo's ROOT workspace, not the picker pane's

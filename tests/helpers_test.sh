@@ -22,7 +22,7 @@ done
 
 # worktrunk_ref_exists resolves both local heads and remote-tracking branches.
 sandbox=$(mktemp -d)
-trap 'rm -rf "$sandbox"' EXIT
+trap 'rm -rf "$sandbox" "$sandbox.linked"' EXIT
 (
   cd "$sandbox"
   git init -q
@@ -47,6 +47,17 @@ for ref in 'does-not-exist' 'origin/nope'; do
     exit 1
   fi
 done
+
+# worktrunk_worktree_paths emits every worktree's physical path, one per line.
+git worktree add -q "$sandbox.linked" feature
+expected_paths=$(printf '%s\n%s\n' \
+  "$(cd "$sandbox" && pwd -P)" \
+  "$(cd "$sandbox.linked" && pwd -P)")
+actual_paths=$(worktrunk_worktree_paths)
+if [[ $actual_paths != "$expected_paths" ]]; then
+  printf 'unexpected worktree paths:\n%s\nexpected:\n%s\n' "$actual_paths" "$expected_paths" >&2
+  exit 1
+fi
 
 cd - >/dev/null
 

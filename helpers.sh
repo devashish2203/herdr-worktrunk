@@ -41,3 +41,14 @@ worktrunk_list_items() {
     end
   '
 }
+
+# Emit the physical (symlink-resolved) path of every existing worktree of the
+# current repo, one per line. The picker snapshots these before `wt switch`: a
+# worktree whose path isn't in the snapshot afterwards is one the switch
+# created, which is what gates the configured post_create_command.
+worktrunk_worktree_paths() {
+  git worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
+    [[ $line == "worktree "* ]] || continue
+    (cd "${line#worktree }" 2>/dev/null && pwd -P)
+  done
+}

@@ -112,4 +112,19 @@ assert_dimension popup_width ""
 printf 'popup_height = "%%50"\n' > "$config_dir/config.toml"           # malformed → dropped
 assert_dimension popup_height ""
 
+assert_hook() {
+  local expected=$1 actual
+  actual=$(worktrunk_post_create_hook 2>/dev/null)
+  if [[ $actual != "$expected" ]]; then
+    printf 'expected post-create hook %q, got %q\n' "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
+(unset HERDR_PLUGIN_CONFIG_DIR; assert_hook "")   # no config dir → disabled
+assert_hook ""                                    # no script → disabled
+
+printf '#!/bin/sh\necho hi\n' > "$config_dir/post-create.sh"
+assert_hook "$config_dir/post-create.sh"
+
 printf 'config tests passed\n'

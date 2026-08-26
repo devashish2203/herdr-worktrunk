@@ -99,6 +99,23 @@ worktrunk_fzf_layout() {
   esac
 }
 
+# Print the path of the user's post-create hook script when one exists in the
+# plugin's managed config directory, or nothing. The script runs inside a
+# worktree the picker just created; per-project behavior belongs in the script
+# itself (branch on WORKTRUNK_MAIN_PATH or the repo's remote URL).
+worktrunk_post_create_hook() {
+  local hook
+
+  if [[ -z ${HERDR_PLUGIN_CONFIG_DIR:-} ]]; then
+    return
+  fi
+
+  hook="$HERDR_PLUGIN_CONFIG_DIR/post-create.sh"
+  if [[ -f $hook ]]; then
+    printf '%s\n' "$hook"
+  fi
+}
+
 # Print the configured popup_width/popup_height, or nothing when unset. herdr
 # takes a popup dimension as terminal cells (24) or a percentage of the window
 # ("80%"), and falls back to a half-size popup when one is omitted. Drop a
