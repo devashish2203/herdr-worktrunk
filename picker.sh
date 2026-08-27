@@ -51,14 +51,16 @@ worktrunk_fzf_layout
 if command -v fzf >/dev/null; then
   choice=$(
     {
+      # Refs first: `git for-each-ref` answers instantly and in refname order,
+      # while `wt list` stats every checkout — seconds on a repo with many
+      # worktrees. Drop origin/HEAD: its short form is bare "origin", so filter
+      # on the full refname (refs/remotes/origin/HEAD), then emit the short name.
+      git for-each-ref --format='%(refname) %(refname:short)' "${branch_refs[@]}" 2>/dev/null \
+        | awk '$1 !~ /\/HEAD$/ {print $2}'
       wt list --format=json 2>/dev/null \
         | worktrunk_list_items \
         | jq -r 'select(.branch != null) | .branch'
-      # Drop origin/HEAD: its short form is bare "origin", so filter on the full
-      # refname (refs/remotes/origin/HEAD) instead, then emit the short name.
-      git for-each-ref --format='%(refname) %(refname:short)' "${branch_refs[@]}" 2>/dev/null \
-        | awk '$1 !~ /\/HEAD$/ {print $2}'
-    } | LC_ALL=C sort -u \
+    } | awk '!seen[$0]++ { print; fflush() }' \
       | fzf --print-query --reverse --info=inline "${WORKTRUNK_FZF_LAYOUT[@]}" \
             --bind=alt-enter:print-query \
             --prompt='worktree ❯ ' \
