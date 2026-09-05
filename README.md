@@ -78,11 +78,30 @@ Supported values:
 - `open_mode = "workspace"` — let Worktrunk create or switch the checkout and
   run its hooks, then register that checkout with `herdr worktree open`. Herdr
   displays it as a nested worktree workspace in the sidebar. This is the default.
-- `open_mode = "tab"` — open a new tab in the current workspace and run `wt`
-  there. This preserves the original plugin behavior.
+- `open_mode = "tab"` — open a new tab in the current workspace and run `wt` in
+  that tab's shell. This preserves the original plugin behavior; see
+  [Tab mode and your shell](#tab-mode-and-your-shell).
 
 The config file is read each time the picker runs, so changing the mode does
 not require reinstalling or reloading the plugin.
+
+### Tab mode and your shell
+
+In tab mode the plugin can't run `wt` itself: the new tab has to end up *inside*
+the worktree, and only the shell running in that tab can change its own
+directory. So the picker types a `wt switch …` line into the tab's interactive
+shell, written in that shell's own syntax, followed by a small relabel step
+(`tab-relabel.sh`) that renames the tab after the branch the switch resolved to.
+The plugin asks herdr which shell the tab runs and supports bash, zsh, fish, and
+nushell; any other shell gets the POSIX form.
+
+This needs worktrunk's shell integration installed for that shell — run
+`wt config shell install` and restart the shell — because it is the
+integration's `wt` command that moves the shell into the worktree. Without it
+the worktree is still created, but the tab stays where it was; the plugin says
+so in the tab and leaves it labeled with the name you picked.
+
+Workspace mode (the default) calls `wt` directly and needs none of this.
 
 ## Remote branches in the picker
 
@@ -258,6 +277,7 @@ The plugin is a manifest plus small bash scripts:
 - `helpers.sh` — shared shell helpers (e.g. worktrunk shortcut detection)
 - `open.sh` — the action entrypoint that opens a picker in its configured placement
 - `picker.sh` — the switch / create picker
+- `tab-relabel.sh` — the relabel step tab mode types into the new tab after `wt switch`
 - `remove.sh` — the remove picker
 - `merge.sh` — the merge picker
 - `lifecycle.sh` — shared steps for the actions that destroy a worktree:
@@ -267,6 +287,8 @@ The plugin is a manifest plus small bash scripts:
 - `tests/lifecycle_test.sh` — candidate/workspace resolution and cleanup checks
 - `tests/merge_test.sh` — merge argument and failure-path checks
 - `tests/open_test.sh` — picker placement / open argument checks
+- `tests/picker_test.sh` — switch / create picker checks in both open modes
+- `tests/tab_relabel_test.sh` — tab relabel checks
 
 herdr caches the manifest when a plugin is linked, so after editing
 `herdr-plugin.toml` you must relink for changes to take effect:

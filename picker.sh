@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Picker for the worktrunk herdr plugin. Picks a branch via fzf (fast), then opens a
-# new tab and runs `wt switch` in THAT pane — so the worktree creation and any hook
-# output happen in the pane you keep, not in this transient picker pane. The new tab
-# runs your interactive shell, so its `wt` function cd's into the worktree and sticks.
+# Picker for the worktrunk herdr plugin. Picks a branch via fzf (fast), then either
+# lets worktrunk create/switch the checkout and registers it as a native worktree
+# workspace (the default), or — in tab mode — opens a new tab and types `wt switch`
+# into THAT tab's shell, so the worktree creation and any hook output happen in the
+# pane you keep and the shell's own `wt` integration cd's it into the worktree.
 
 create_base=""
 create_base_label="default branch"
@@ -84,49 +85,32 @@ open_mode=$(worktrunk_open_mode)
 # Anything else is a new branch → create it.
 if worktrunk_is_shortcut "$name" || worktrunk_ref_exists "$name"; then
   wtargs=(switch "$name")
-  is_create=false
 else
   wtargs=(switch --create "$name")
   [[ -n $create_base ]] && wtargs+=(--base "$create_base")
-  is_create=true
 fi
 
 herdr=${HERDR_BIN_PATH:-herdr}
 
 if [[ $open_mode == tab ]]; then
-  # Preserve the original behavior: run wt in a new tab's interactive shell so
-  # shell integration can cd into the worktree and keep the user there.
-  printf -v quoted_name '%q' "$name"
-  if [[ $is_create == true ]]; then
-    if [[ -n $create_base ]]; then
-      printf -v quoted_base '%q' "$create_base"
-      wtcmd="wt switch --create $quoted_name --base $quoted_base"
-    else
-      wtcmd="wt switch --create $quoted_name"
-    fi
-  else
-    wtcmd="wt switch $quoted_name"
-  fi
+  # Run wt in a new tab's interactive shell rather than here: only that shell can
+  # cd itself into the worktree (through worktrunk's shell integration), and the
+  # hook output then lands in the pane the user keeps, not in this transient one.
+  tab_json=$("$herdr" tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$PWD" --label "$name" --focus)
+  newpane=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.pane_id // empty')
+  tab_id=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.tab_id // empty')
+  [[ -z $newpane || -z $tab_id ]] && { printf '\033[31m%s\033[0m\n' "failed to open worktree tab"; sleep 2; exit 1; }
 
-  tab_json=$("$herdr" tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$PWD" --label "$name" \
-    --env "WT_PICKER_NAME=$name" --focus)
-  newpane=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.pane_id')
-  tab_id=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.tab_id')
-  [[ -z $newpane ]] && { printf '\033[31m%s\033[0m\n' "failed to open worktree tab"; sleep 2; exit 1; }
+  # The line is typed into that tab's own shell, so it is generated in that shell's
+  # syntax (see worktrunk_tab_command). The label above is a placeholder — $name may
+  # be a shortcut — that tab-relabel.sh replaces once the switch lands.
+  shell=$(worktrunk_pane_shell "$herdr" "$newpane")
+  family=$(worktrunk_shell_family "$shell")
+  line=$(worktrunk_tab_command "$family" "$plugin_root/tab-relabel.sh" "$herdr" "$tab_id" "$name" "$PWD" -- "${wtargs[@]}")
 
-  # $name may be a worktrunk shortcut (^, -, pr:N, mr:N, a PR/MR URL) rather than the
-  # actual branch, so the tab label above is a placeholder. Once the switch lands,
-  # relabel with the real branch it resolved to, keeping the typed name alongside in
-  # parens (e.g. "feat/eager-worktree-focus (pr:16)") when it differs.
-  printf -v quoted_herdr '%q' "$herdr"
-  printf -v quoted_tab_id '%q' "$tab_id"
-  relabel_cmd='branch=$(git branch --show-current)'
-  relabel_cmd+='; [ "$branch" = "$WT_PICKER_NAME" ] && label=$branch || label="$branch ($WT_PICKER_NAME)"'
-  relabel_cmd+="; $quoted_herdr tab rename $quoted_tab_id \"\$label\""
-
-  # pane run sends the command to the tab's interactive shell; the terminal buffers it
-  # until the shell finishes loading, so its `wt` function is in place when it runs.
-  "$herdr" pane run "$newpane" "$wtcmd && $relabel_cmd"
+  # pane run sends the line to the tab's interactive shell; the terminal buffers it
+  # until the shell finishes loading, so its `wt` command is in place when it runs.
+  "$herdr" pane run "$newpane" "$line"
   exit
 fi
 
@@ -138,15 +122,10 @@ if ! result=$(wt "${wtargs[@]}" --no-cd --format=json); then
   exit 1
 fi
 
-# $name may be a worktrunk shortcut (^, -, pr:N, mr:N, a PR/MR URL) rather than the
-# actual branch, so use what it resolved to for the label, keeping the typed name
-# alongside in parens (e.g. "feat/eager-worktree-focus (pr:16)") when it differs.
-label=$(printf '%s\n' "$result" | jq -r '.branch // empty' 2>/dev/null)
-if [[ -z $label ]]; then
-  label=$name
-elif [[ $label != "$name" ]]; then
-  label="$label ($name)"
-fi
+# $name may be a worktrunk shortcut rather than the actual branch: label with what
+# it resolved to (see worktrunk_switch_label).
+branch=$(printf '%s\n' "$result" | jq -r '.branch // empty' 2>/dev/null)
+label=$(worktrunk_switch_label "$branch" "$name")
 
 wtpath=$(printf '%s\n' "$result" | jq -r '.path // empty' 2>/dev/null)
 if [[ -z $wtpath ]]; then
