@@ -30,6 +30,13 @@ if [[ $path != /repo.feature ]]; then
   exit 1
 fi
 
+# The removal runs from the main worktree, wherever the pane happens to be.
+mainpath=$(printf '%s\n' "$items" | worktrunk_main_worktree_path)
+if [[ $mainpath != /repo ]]; then
+  printf 'expected /repo as the main worktree, got %q\n' "$mainpath" >&2
+  exit 1
+fi
+
 # Stand in for the herdr binary: `worktree list` answers with one open workspace,
 # `pane list` with panes inside and outside the worktree, and everything else
 # records the argv it was called with.

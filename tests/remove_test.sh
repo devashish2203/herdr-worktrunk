@@ -96,10 +96,11 @@ refute_pane() {
 }
 
 # Remove the picked worktree in the foreground, so the workspace close can't race
-# the removal, and close without waiting.
+# the removal, and from the main worktree, so worktrunk has no directory change to
+# warn about. Close without waiting.
 : > "$config_dir/config.toml"
 run_remove
-assert_log wt 'remove --foreground feature' "$WT_STUB_LOG"
+assert_log wt 'remove --foreground -C /repo feature' "$WT_STUB_LOG"
 assert_log herdr 'workspace close ws-feature' "$HERDR_STUB_LOG"
 refute_pane 'press any key to continue'
 

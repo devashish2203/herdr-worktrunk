@@ -36,6 +36,14 @@ worktrunk_worktree_path() {
   jq -r --arg b "$1" 'select(.kind == "worktree" and .branch == $b) | .path'
 }
 
+# Print the path of the main worktree, reading items on stdin. `wt remove` runs from
+# there (-C): removing the worktree the pane sits in makes worktrunk try to cd the
+# shell back to the main one, and a plain bash pane has no shell integration for
+# that, so it would warn about it on every such removal.
+worktrunk_main_worktree_path() {
+  jq -r 'select(.kind == "worktree" and .is_main == true) | .path' | head -n1
+}
+
 # Print the id of the native herdr workspace open on the worktree at PATH, or
 # nothing (tab mode, or a worktree herdr never opened as a workspace). Resolve this
 # before the worktree is destroyed — herdr forgets the mapping along with it.

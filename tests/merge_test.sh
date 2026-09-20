@@ -99,11 +99,12 @@ refute_pane() {
 }
 
 # Default action: merge the picked worktree by path, keep it, then remove it in the
-# foreground so the workspace close can't race the removal.
+# foreground so the workspace close can't race the removal — and from the main
+# worktree, so worktrunk has no directory change to warn about.
 : > "$config_dir/config.toml"
 run_merge
 assert_log wt 'merge --no-remove -C /repo.feature' "$WT_STUB_LOG"
-assert_log wt 'remove --foreground feature' "$WT_STUB_LOG"
+assert_log wt 'remove --foreground -C /repo feature' "$WT_STUB_LOG"
 assert_log herdr 'workspace close ws-feature' "$HERDR_STUB_LOG"
 refute_pane 'press any key to continue'
 
@@ -137,7 +138,7 @@ refute_log herdr 'workspace close' "$HERDR_STUB_LOG"
 # A merge that landed but a removal that didn't keeps the workspace open — it still
 # holds the worktree.
 WT_STUB_REMOVE_STATUS=1 run_merge
-assert_log wt 'remove --foreground feature' "$WT_STUB_LOG"
+assert_log wt 'remove --foreground -C /repo feature' "$WT_STUB_LOG"
 refute_log herdr 'workspace close' "$HERDR_STUB_LOG"
 
 # hold_on_merge keeps the pane up after a successful merge, and asks for the key

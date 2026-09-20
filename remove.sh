@@ -32,11 +32,13 @@ name=$(printf '%s\n' "$cands" \
 # Path and native herdr workspace (if open) of the worktree we're about to remove.
 wtpath=$(printf '%s\n' "$wtitems" | worktrunk_worktree_path "$name")
 wsid=$(worktrunk_open_workspace_id "$wtpath")
+mainpath=$(printf '%s\n' "$wtitems" | worktrunk_main_worktree_path)
 
 # wt remove prompts for approval itself, refuses unmerged branches without -D, and
 # refuses worktrees with untracked files without -f — so run it interactively and let
 # worktrunk gate the destructive bits. --foreground keeps the pane until it's done.
-if ! wt remove --foreground "$name"; then
+# -C runs it from the main worktree (see worktrunk_main_worktree_path).
+if ! wt remove --foreground -C "$mainpath" "$name"; then
   printf '\n\033[31m%s\033[0m press any key to close' "wt remove failed (see above)."; read -n1
   exit 0
 fi

@@ -61,6 +61,7 @@ name=$(printf '%s\n' "$cands" \
 # Both have to be resolved before the removal below destroys them.
 wtpath=$(printf '%s\n' "$wtitems" | worktrunk_worktree_path "$name")
 wsid=$(worktrunk_open_workspace_id "$wtpath")
+mainpath=$(printf '%s\n' "$wtitems" | worktrunk_main_worktree_path)
 
 # -C runs the merge as if from the picked worktree, so the pane never has to be in
 # it. --no-remove because wt merge's own removal runs in the background, which would
@@ -74,8 +75,9 @@ if ! wt merge --no-remove -C "$wtpath" "${merge_flags[@]}"; then
 fi
 
 # The branch is merged now, so wt remove deletes it without -D. --foreground blocks
-# until the worktree is really gone, so closing its workspace can't outrun it.
-if ! wt remove --foreground "$name"; then
+# until the worktree is really gone, so closing its workspace can't outrun it. -C
+# runs it from the main worktree (see worktrunk_main_worktree_path).
+if ! wt remove --foreground -C "$mainpath" "$name"; then
   printf '\n\033[31m%s\033[0m press any key to close' \
     "merged, but wt remove failed (see above)."; read -n1
   exit 0
