@@ -27,7 +27,9 @@ printf '%s' "$FZF_STUB_OUT"
 exit "${FZF_STUB_EXIT:-0}"
 EOF
 
-# wt stub: `list` feeds the picker, `switch` records the argv under test.
+# wt stub: `list` feeds the picker, `switch` records the argv under test and
+# answers as worktrunk does — $WT_STUB_ACTION says whether it `created` the worktree
+# or switched to an `existing` one — or fails when $WT_STUB_SWITCH_STATUS asks.
 cat > "$stub_dir/wt" <<'EOF'
 #!/usr/bin/env bash
 if [[ ${1:-} == list ]]; then
@@ -35,11 +37,15 @@ if [[ ${1:-} == list ]]; then
   exit 0
 fi
 printf '%s ' "$@" > "$STUB_DIR/wt.args"
-printf '{"branch":"%s","path":"%s"}\n' "${2:-}" "$STUB_DIR/checkout"
+[[ $WT_STUB_SWITCH_STATUS != 0 ]] && exit "$WT_STUB_SWITCH_STATUS"
+branch=${2:-}
+[[ $branch == --create ]] && branch=${3:-}
+printf '{"action":"%s","branch":"%s","path":"%s"}\n' "$WT_STUB_ACTION" "$branch" "$STUB_DIR/checkout"
 EOF
 
 # herdr stub: `worktree list` locates the repo root and `worktree open` is the
-# workspace-mode result. In tab mode `tab create` answers with a pane, `pane
+# workspace-mode result, echoed into the pane so a message can be placed before or
+# after it. In tab mode `tab create` answers with a pane, `pane
 # process-info` describes the shell running in it ($HERDR_STUB_SHELL, or a failure
 # when that is `fail`), and `pane run` records the line typed into it.
 cat > "$stub_dir/herdr" <<'EOF'
@@ -48,6 +54,9 @@ printf '%s\n' "$*" >> "$STUB_DIR/herdr.log"
 case "${1:-} ${2:-}" in
   "worktree list")
     printf '{"result":{"source":{"repo_root":"%s","repo_name":"repo","source_workspace_id":"w1"}}}\n' "$REPO_CWD"
+    ;;
+  "worktree open")
+    printf '%s\n' "$*"
     ;;
   "tab create")
     printf '%s\n' "$@" > "$STUB_DIR/tab_create.args"
@@ -71,7 +80,8 @@ wt_list='[{"branch":"silas/foo-bar","path":"/tmp/a","kind":"worktree"},
           {"branch":"pr-42","path":"/tmp/b","kind":"worktree"}]'
 
 # The shell herdr reports for a new tab and the $SHELL the picker would fall back
-# to are pinned so the runner's own shell can't leak into the tab-mode cases.
+# to are pinned so the runner's own shell can't leak into the tab-mode cases. With
+# stdin at /dev/null a "press any key" read returns at once.
 run_picker() {
   local out=$1 exit_code=$2
   shift 2
@@ -84,19 +94,24 @@ run_picker() {
     FZF_STUB_OUT="$out" \
     FZF_STUB_EXIT="$exit_code" \
     WT_STUB_LIST="$wt_list" \
+    WT_STUB_ACTION="${WT_STUB_ACTION:-created}" \
+    WT_STUB_SWITCH_STATUS="${WT_STUB_SWITCH_STATUS:-0}" \
     HERDR_STUB_SHELL="${HERDR_STUB_SHELL:-zsh}" \
     SHELL="${PICKER_SHELL:-/bin/zsh}" \
     HERDR_PLUGIN_ROOT="$repo_root" \
     HERDR_BIN_PATH="$stub_dir/herdr" \
     HERDR_PLUGIN_CONFIG_DIR="$config_dir" \
     HERDR_WORKSPACE_ID=w1 \
-      bash "$repo_root/picker.sh" "$@" >/dev/null 2>&1
+      bash "$repo_root/picker.sh" "$@" </dev/null >"$stub_dir/pane.out" 2>&1
   )
 }
 
 wt_args() { cat "$stub_dir/wt.args" 2>/dev/null || true; }
 pane_run_args() { cat "$stub_dir/pane_run.args" 2>/dev/null || true; }
 herdr_log() { cat "$stub_dir/herdr.log" 2>/dev/null || true; }
+# The pane output flattened to one line, so a pattern can span the order things
+# were shown in.
+pane_out() { tr '\n' ' ' < "$stub_dir/pane.out"; }
 
 assert_eq() {
   local expected=$1 actual=$2 what=${3:-value}
@@ -110,6 +125,14 @@ assert_contains() {
   local needle=$1 haystack=$2 what=${3:-output}
   if [[ $haystack != *"$needle"* ]]; then
     printf 'expected %q in %s %q\n' "$needle" "$what" "$haystack" >&2
+    exit 1
+  fi
+}
+
+refute_contains() {
+  local needle=$1 haystack=$2 what=${3:-output}
+  if [[ $haystack == *"$needle"* ]]; then
+    printf 'unexpected %q in %s %q\n' "$needle" "$what" "$haystack" >&2
     exit 1
   fi
 }
@@ -147,6 +170,46 @@ assert_contains '--bind=alt-enter:print-query' "$(cat "$stub_dir/fzf.args")" 'fz
 # the picker fills in before worktrunk has finished stat-ing every checkout.
 assert_eq $'main\nsilas/foo-bar\npr-42' "$(cat "$stub_dir/fzf.stdin")" 'candidate list'
 
+# A created worktree opens its workspace without waiting.
+run_picker $'silas/brand-new' 1
+refute_contains 'press any key to continue' "$(pane_out)" 'pane output'
+assert_contains 'worktree open ' "$(herdr_log)" 'herdr calls'
+
+# hold_on_create keeps the pane up once worktrunk has created the worktree, and asks
+# for the key before the workspace opens and takes the focus away.
+printf 'hold_on_create = true\n' > "$config_dir/config.toml"
+run_picker $'silas/brand-new' 1
+if ! pane_out | grep -qE 'created worktree silas/brand-new\..*press any key to continue.*worktree open '; then
+  printf 'expected the hold before worktree open, got %q\n' "$(pane_out)" >&2
+  exit 1
+fi
+assert_contains 'worktree open ' "$(herdr_log)" 'herdr calls'
+
+# Switching to a worktree that already exists has nothing to read, so it never holds.
+WT_STUB_ACTION=existing run_picker $'silas/foo-bar' 0
+refute_contains 'press any key to continue' "$(pane_out)" 'pane output'
+assert_contains 'worktree open ' "$(herdr_log)" 'herdr calls'
+
+# hold_on_success covers creation as well, unless hold_on_create says otherwise.
+printf 'hold_on_success = true\n' > "$config_dir/config.toml"
+run_picker $'silas/brand-new' 1
+assert_contains 'created worktree silas/brand-new.' "$(pane_out)" 'pane output'
+
+printf 'hold_on_success = true\nhold_on_create = false\n' > "$config_dir/config.toml"
+run_picker $'silas/brand-new' 1
+refute_contains 'press any key to continue' "$(pane_out)" 'pane output'
+
+# A failure keeps its own message whatever the hold settings say.
+printf 'hold_on_success = true\n' > "$config_dir/config.toml"
+if WT_STUB_SWITCH_STATUS=1 run_picker $'silas/brand-new' 1; then
+  printf 'expected picker.sh to fail when wt switch does\n' >&2
+  exit 1
+fi
+assert_contains 'wt switch failed (see above).' "$(pane_out)" 'pane output'
+refute_contains 'created worktree' "$(pane_out)" 'pane output'
+refute_contains 'worktree open ' "$(herdr_log)" 'herdr calls'
+: > "$config_dir/config.toml"
+
 # Tab mode never runs wt here: it opens a tab and types `wt switch` into that tab's
 # shell, in the syntax of whichever shell herdr says the tab runs, followed by the
 # relabel step. Nothing else about the picker changes. The exact lines below spell
@@ -183,6 +246,12 @@ HERDR_STUB_SHELL=fail PICKER_SHELL=/opt/homebrew/bin/nu run_picker $'silas/brand
 assert_contains "print -n (wt switch --create 'silas/brand-new'); bash " "$(pane_run_args)" 'pane run line'
 HERDR_STUB_SHELL=fail PICKER_SHELL=/bin/bash run_picker $'silas/brand-new' 1
 assert_contains 'wt switch --create silas/brand-new && bash ' "$(pane_run_args)" 'pane run line'
+
+# wt's output lands in the tab the user keeps, so tab mode has nothing to hold for.
+printf 'open_mode = "tab"\nhold_on_create = true\n' > "$config_dir/config.toml"
+HERDR_STUB_SHELL=zsh run_picker $'silas/brand-new' 1
+refute_contains 'press any key to continue' "$(pane_out)" 'pane output'
+assert_contains 'pane run w1V:p5 ' "$(herdr_log)" 'herdr calls'
 
 # esc still cancels before any tab is opened.
 run_picker '' 130

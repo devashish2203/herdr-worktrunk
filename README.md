@@ -131,6 +131,33 @@ Accepted: `--no-squash`, `--no-rebase`, `--no-ff`, `--no-commit`, `--no-hooks`,
 A merge that fails leaves the worktree and its workspace alone, with worktrunk's
 output on screen.
 
+## Holding the pane on success
+
+When worktrunk succeeds the picker pane closes straight away, taking the output of
+`wt` and its hooks with it — most noticeably in a popup. To keep the pane up until
+you press a key, set `hold_on_success` in the same `config.toml`:
+
+```toml
+hold_on_success = true
+```
+
+To hold only some actions, set their own keys instead. An action's key wins over
+`hold_on_success`, so it can also switch a single action back off:
+
+```toml
+hold_on_success = true
+hold_on_create = false
+```
+
+- `hold_on_create` — after `wt switch` created a worktree, before its workspace
+  opens. Switching to an existing worktree never holds, and neither does tab mode,
+  where `wt` runs in the tab you keep.
+- `hold_on_merge` — after `wt merge` and the removal that follows it.
+- `hold_on_remove` — after `wt remove`.
+
+All four default to `false`. A failure always keeps the pane up, whatever these
+are set to.
+
 ## Picker presentation
 
 The picker opens in a split pane below the workspace. To open it as a
@@ -288,6 +315,7 @@ The plugin is a manifest plus small bash scripts:
 - `tests/merge_test.sh` — merge argument and failure-path checks
 - `tests/open_test.sh` — picker placement / open argument checks
 - `tests/picker_test.sh` — switch / create picker checks in both open modes
+- `tests/remove_test.sh` — remove argument, failure-path and hold checks
 - `tests/tab_relabel_test.sh` — tab relabel checks
 
 herdr caches the manifest when a plugin is linked, so after editing

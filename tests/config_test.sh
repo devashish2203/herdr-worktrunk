@@ -139,4 +139,45 @@ assert_merge_flags "--no-squash"
 printf 'merge_flags = "--no-remove --format=json -C /tmp --yes"\n' > "$config_dir/config.toml"
 assert_merge_flags ""
 
+assert_hold() {
+  local action=$1 expected=$2 actual
+  actual=$(worktrunk_hold_on "$action" 2>/dev/null)
+  if [[ $actual != "$expected" ]]; then
+    printf 'expected hold on %s %q, got %q\n' "$action" "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
+printf 'open_mode = "tab"\n' > "$config_dir/config.toml"   # unrelated key → default
+assert_hold create false
+assert_hold merge false
+assert_hold remove false
+
+printf 'hold_on_success = true\n' > "$config_dir/config.toml"          # covers every action
+assert_hold create true
+assert_hold merge true
+assert_hold remove true
+
+printf 'hold_on_merge = "true"\n' > "$config_dir/config.toml"          # one action, quoted also ok
+assert_hold create false
+assert_hold merge true
+assert_hold remove false
+
+# The action's own key wins over hold_on_success, in either direction.
+printf 'hold_on_success = true\nhold_on_remove = false\n' > "$config_dir/config.toml"
+assert_hold create true
+assert_hold merge true
+assert_hold remove false
+
+printf 'hold_on_success = false\nhold_on_create = true\n' > "$config_dir/config.toml"
+assert_hold create true
+assert_hold merge false
+
+# An unsupported value is ignored, so the next key in line still decides.
+printf 'hold_on_success = true\nhold_on_merge = maybe\n' > "$config_dir/config.toml"
+assert_hold merge true
+
+printf 'hold_on_success = maybe\n' > "$config_dir/config.toml"
+assert_hold merge false
+
 printf 'config tests passed\n'

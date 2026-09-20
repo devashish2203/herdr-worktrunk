@@ -41,4 +41,5 @@ if ! wt remove --foreground "$name"; then
   exit 0
 fi
 
+worktrunk_hold_pane remove "removed $name."
 worktrunk_close_worktree_ui "$wsid" "$wtpath"

@@ -140,6 +140,13 @@ if [[ -z $wtpath ]]; then
   exit 1
 fi
 
+# Only a worktree worktrunk just created has hook output worth reading; a switch to
+# an existing one opens straight away. Hold before the workspace opens below — it
+# takes the focus with it.
+if [[ $(printf '%s\n' "$result" | jq -r '.action // empty' 2>/dev/null) == created ]]; then
+  worktrunk_hold_pane create "created worktree $label."
+fi
+
 # Register the worktree under the repo's ROOT workspace, not the picker pane's
 # current workspace. When the picker runs from inside an existing worktree
 # workspace, $HERDR_WORKSPACE_ID is that worktree's own (linked-worktree)

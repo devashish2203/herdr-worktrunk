@@ -170,3 +170,15 @@ worktrunk_tab_command() {
     *) printf '%s && %s\n' "$wt" "$relabel_cmd" ;;
   esac
 }
+
+# Keep the pane up with MESSAGE until a key is pressed, when the configuration
+# holds ACTION (see worktrunk_hold_on in config.sh, sourced first). Call it once
+# worktrunk has succeeded and before herdr is asked to change anything: the pane
+# can sit in a workspace that is about to close or lose focus.
+worktrunk_hold_pane() {
+  local action=$1 message=$2
+
+  if [[ $(worktrunk_hold_on "$action") == true ]]; then
+    printf '\n\033[32m%s\033[0m press any key to continue' "$message"; read -n1
+  fi
+}

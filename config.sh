@@ -120,6 +120,33 @@ worktrunk_popup_dimension() {
   esac
 }
 
+# Print "true"/"false" for whether ACTION's pane (create, merge or remove) waits
+# for a key once worktrunk succeeds, so its output can be read before the pane
+# closes. Disabled by default. hold_on_<action> decides for that action alone and
+# wins over hold_on_success, which covers every action; an unsupported value is
+# skipped, so the next key in line still decides.
+worktrunk_hold_on() {
+  local action=$1 key value
+
+  for key in "hold_on_$action" hold_on_success; do
+    value=$(worktrunk_config_value "$key")
+
+    case "$value" in
+      "")
+        ;;
+      true|false)
+        printf '%s\n' "$value"
+        return
+        ;;
+      *)
+        printf '\033[33mWarning:\033[0m unsupported %s %q; ignoring it\n' "$key" "$value" >&2
+        ;;
+    esac
+  done
+
+  printf '%s\n' false
+}
+
 # Print the extra flags to pass to `wt merge`, one per line, from the
 # whitespace-separated merge_flags value. Only flags that leave the merger's own
 # contract intact are accepted: -C, --no-remove and --format are the merger's to
