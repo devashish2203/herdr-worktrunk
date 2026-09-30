@@ -115,6 +115,18 @@ show_remote_branches = true
 
 Local branches without worktrees always appear regardless of this setting.
 
+## Branch names from free text
+
+A new branch is created with the name exactly as typed. To turn a pasted title
+like `Fix Login Bug` into `fix-login-bug`, set `slugify_new_branches` in the same
+`config.toml`:
+
+```toml
+slugify_new_branches = true
+```
+
+Existing branches and worktrunk shortcuts are never changed.
+
 ## Merge flags
 
 The merge actions pass no flags to `wt merge` beyond the variant's `--no-squash`.

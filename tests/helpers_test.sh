@@ -35,6 +35,26 @@ assert_eq pr:16 "$(worktrunk_switch_label '' pr:16)" 'switch label'
 assert_eq 'feat/eager-worktree-focus (pr:16)' \
   "$(worktrunk_switch_label feat/eager-worktree-focus pr:16)" 'switch label'
 
+# Branch slugs.
+assert_eq optimize-stripe-loading-waterfall \
+  "$(worktrunk_branch_slug 'optimize Stripe loading waterfall')" 'branch slug'
+assert_eq fix-user-s-login-bug "$(worktrunk_branch_slug "  Fix: user's LOGIN bug!! ")" 'branch slug'
+assert_eq fix-user-s-login "$(worktrunk_branch_slug $'fix user\xe2\x80\x99s login')" 'branch slug'
+assert_eq feat/add-api-v2 "$(worktrunk_branch_slug 'Feat / Add API v2')" 'branch slug'
+assert_eq a/b "$(worktrunk_branch_slug '//a//b//')" 'branch slug'
+assert_eq v1.2_fix "$(worktrunk_branch_slug 'v1..2_FIX.')" 'branch slug'
+assert_eq a/b "$(worktrunk_branch_slug 'a/.b')" 'branch slug'
+assert_eq already-a-slug "$(worktrunk_branch_slug already-a-slug)" 'branch slug'
+
+# No valid name left: fail and print nothing.
+for text in '' '!!!' ' - / . ' 'foo.lock'; do
+  if out=$(worktrunk_branch_slug "$text"); then
+    printf 'expected no branch slug for %q, got %q\n' "$text" "$out" >&2
+    exit 1
+  fi
+  assert_eq '' "$out" "branch slug output for $text"
+done
+
 sandbox=$(mktemp -d)     # a git repo for worktrunk_ref_exists
 pane_stub=$(mktemp -d)   # a herdr stand-in for worktrunk_pane_shell, further down
 trap 'rm -rf "$sandbox" "$pane_stub"' EXIT

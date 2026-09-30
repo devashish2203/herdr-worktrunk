@@ -53,6 +53,27 @@ assert_remote false
 printf 'show_remote_branches = maybe\n' > "$config_dir/config.toml"   # unsupported → default
 assert_remote false
 
+assert_slugify() {
+  local expected=$1 actual
+  actual=$(worktrunk_slugify_new_branches 2>/dev/null)
+  if [[ $actual != "$expected" ]]; then
+    printf 'expected slugify_new_branches %q, got %q\n' "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
+printf 'open_mode = "tab"\n' > "$config_dir/config.toml"   # unrelated key → default
+assert_slugify false
+
+printf 'slugify_new_branches = true\n' > "$config_dir/config.toml"
+assert_slugify true
+
+printf 'slugify_new_branches = "false"\n' > "$config_dir/config.toml"
+assert_slugify false
+
+printf 'slugify_new_branches = yes\n' > "$config_dir/config.toml"      # unsupported → default
+assert_slugify false
+
 assert_placement() {
   local expected=$1 actual
   actual=$(worktrunk_picker_placement 2>/dev/null)

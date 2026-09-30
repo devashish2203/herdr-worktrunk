@@ -210,6 +210,46 @@ refute_contains 'created worktree' "$(pane_out)" 'pane output'
 refute_contains 'worktree open ' "$(herdr_log)" 'herdr calls'
 : > "$config_dir/config.toml"
 
+# A new name is created as typed by default...
+run_picker $'optimize Stripe loading waterfall' 1
+assert_eq 'switch --create optimize Stripe loading waterfall --no-cd --format=json ' "$(wt_args)" 'wt argv'
+
+# ...and slugified with slugify_new_branches, keeping the base.
+printf 'slugify_new_branches = true\n' > "$config_dir/config.toml"
+run_picker $'optimize Stripe loading waterfall' 1
+assert_eq 'switch --create optimize-stripe-loading-waterfall --no-cd --format=json ' "$(wt_args)" 'wt argv'
+assert_contains 'worktree open ' "$(herdr_log)" 'herdr calls'
+run_picker $'Silas / Brand New' 1 --create-base=current
+assert_eq 'switch --create silas/brand-new --base @ --no-cd --format=json ' "$(wt_args)" 'wt argv'
+
+# A slug that names an existing branch switches to it.
+run_picker $'Silas / Foo Bar' 1
+assert_eq 'switch silas/foo-bar --no-cd --format=json ' "$(wt_args)" 'wt argv'
+
+# Existing branches and shortcuts are left alone.
+run_picker $'silas/foo-bar' 0
+assert_eq 'switch silas/foo-bar --no-cd --format=json ' "$(wt_args)" 'wt argv'
+run_picker $'pr:16' 1
+assert_eq 'switch pr:16 --no-cd --format=json ' "$(wt_args)" 'wt argv'
+run_picker $'^' 1
+assert_eq 'switch ^ --no-cd --format=json ' "$(wt_args)" 'wt argv'
+
+# No valid name left fails before wt runs.
+if run_picker $'!!!' 1; then
+  printf 'expected picker.sh to fail when no branch name is left\n' >&2
+  exit 1
+fi
+assert_contains 'no valid branch name in: !!!' "$(pane_out)" 'pane output'
+assert_eq '' "$(wt_args)" 'wt argv'
+refute_contains 'worktree open ' "$(herdr_log)" 'herdr calls'
+
+# Tab mode uses the slug too.
+printf 'slugify_new_branches = true\nopen_mode = "tab"\n' > "$config_dir/config.toml"
+HERDR_STUB_SHELL=nu run_picker $'Optimize Stripe' 1
+assert_contains "print -n (wt switch --create 'optimize-stripe'); bash " "$(pane_run_args)" 'pane run line'
+assert_contains $'--label\noptimize-stripe\n' "$(cat "$stub_dir/tab_create.args")" 'tab create argv'
+: > "$config_dir/config.toml"
+
 # Tab mode never runs wt here: it opens a tab and types `wt switch` into that tab's
 # shell, in the syntax of whichever shell herdr says the tab runs, followed by the
 # relabel step. Nothing else about the picker changes. The exact lines below spell

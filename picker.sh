@@ -76,6 +76,18 @@ else
 fi
 [[ -z $name ]] && exit 0
 
+# Slugify a new branch name. The slug may name an existing branch, which the
+# check below then switches to.
+if [[ $(worktrunk_slugify_new_branches) == true ]] \
+  && ! worktrunk_is_shortcut "$name" && ! worktrunk_ref_exists "$name"; then
+  if ! slug=$(worktrunk_branch_slug "$name"); then
+    printf '\033[31m%s\033[0m press any key to close' "no valid branch name in: $name"
+    read -n1
+    exit 1
+  fi
+  name=$slug
+fi
+
 open_mode=$(worktrunk_open_mode)
 
 # Existing local or remote-tracking branch → switch (wt creates the worktree if

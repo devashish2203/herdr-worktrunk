@@ -42,6 +42,27 @@ worktrunk_show_remote_branches() {
   esac
 }
 
+# Print "true"/"false" for whether new branch names are slugified before creation.
+# Disabled by default; set slugify_new_branches = true.
+worktrunk_slugify_new_branches() {
+  local value
+
+  value=$(worktrunk_config_value slugify_new_branches)
+
+  case "$value" in
+    ""|false)
+      printf '%s\n' false
+      ;;
+    true)
+      printf '%s\n' true
+      ;;
+    *)
+      printf '\033[33mWarning:\033[0m unsupported slugify_new_branches %q; creating names as typed\n' "$value" >&2
+      printf '%s\n' false
+      ;;
+  esac
+}
+
 worktrunk_open_mode() {
   local mode
 

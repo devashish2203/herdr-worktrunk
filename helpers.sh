@@ -34,6 +34,24 @@ worktrunk_ref_exists() {
     || git show-ref --quiet --verify "refs/remotes/$1"
 }
 
+# Print TEXT as a lowercase, hyphenated branch name, e.g. "Fix Login Bug" →
+# "fix-login-bug". Keeps `/`, `.` and `_`; fails when no valid name is left.
+worktrunk_branch_slug() {
+  local slug
+
+  slug=$(printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C sed -E '
+    s#[^a-z0-9._/]+#-#g
+    s#-*/+-*#/#g
+    s#\.{2,}#.#g
+    s#/\.+#/#g
+    s#^[-/.]+##
+    s#[-/.]+$##
+  ')
+
+  [[ -n $slug ]] && git check-ref-format "refs/heads/$slug" || return 1
+  printf '%s\n' "$slug"
+}
+
 # Emit one worktrunk list item per line with the schema 1 location fields
 # (`kind`, `path`, and `is_main`) available at the top level. Worktrunk's JSON
 # schema 2 wraps items in an envelope and nests those fields under `worktree`.
