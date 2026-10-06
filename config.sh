@@ -3,7 +3,7 @@
 # Print the configured worktree presentation mode. Native workspace mode is the
 # default; set open_mode = "tab" to keep the original tab-based behavior.
 worktrunk_config_value() {
-  local key=$1 config_file
+  local key=$1 config_file bom=$'\357\273\277'
 
   if [[ -z ${HERDR_PLUGIN_CONFIG_DIR:-} ]]; then
     return
@@ -14,10 +14,16 @@ worktrunk_config_value() {
     return
   fi
 
-  # Accept both quoted strings (open_mode = "tab") and bare TOML scalars
-  # (show_remote_branches = false); \2 is the quoted body, \3 the unquoted token.
+  # Accept double-quoted strings (open_mode = "tab"), single-quoted TOML literals
+  # (open_mode = 'tab') and bare scalars (show_remote_branches = false), each
+  # optionally followed by a # comment. \2 is the double-quoted body, \3 the
+  # single-quoted one, \4 the bare token, which can't contain a quote, so a
+  # quoted value never comes back with its quotes. The first expression drops a
+  # UTF-8 BOM that a Windows editor may write; bash supplies its bytes because
+  # BSD sed has no \x escapes. config.ps1 parses the same forms.
   sed -nE \
-    "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*(\"([^\"]*)\"|([^[:space:]#\"]+))[[:space:]]*(#.*)?$/\\2\\3/p" \
+    -e "1s/^${bom}//" \
+    -e "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*(\"([^\"]*)\"|'([^']*)'|([^[:space:]#\"']+))[[:space:]]*(#.*)?$/\\2\\3\\4/p" \
     "$config_file" | tail -n1
 }
 

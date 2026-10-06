@@ -160,6 +160,99 @@ assert_merge_flags "--no-squash"
 printf 'merge_flags = "--no-remove --format=json -C /tmp --yes"\n' > "$config_dir/config.toml"
 assert_merge_flags ""
 
+# One config.toml may be shared between macOS/Linux and Windows, so
+# worktrunk_config_value and config.ps1's Get-WorktrunkConfigValue must read it
+# the same way: config_test.ps1 runs this same table.
+assert_value() {
+  local key=$1 expected=$2 actual
+  actual=$(worktrunk_config_value "$key")
+  if [[ $actual != "$expected" ]]; then
+    printf 'expected %s %q, got %q\n' "$key" "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
+printf '%s\n' 'open_mode = "tab"' > "$config_dir/config.toml"
+assert_value open_mode tab
+
+# Single-quoted TOML literals, the natural form for Windows paths, lose their
+# quotes and keep spaces and backslashes as written.
+printf '%s\n' "worktrunk_bin = 'C:\path\to\wt.exe'" > "$config_dir/config.toml"
+assert_value worktrunk_bin 'C:\path\to\wt.exe'
+
+printf '%s\n' "worktrunk_bin = 'C:\Program Files\worktrunk\wt.exe'" > "$config_dir/config.toml"
+assert_value worktrunk_bin 'C:\Program Files\worktrunk\wt.exe'
+
+printf '%s\n' "worktrunk_bin = 'C:\tools\wt.exe' # literal" > "$config_dir/config.toml"
+assert_value worktrunk_bin 'C:\tools\wt.exe'
+
+printf '%s\n' 'worktrunk_bin = "C:\\tools\\wt.exe"' > "$config_dir/config.toml"   # escapes kept as written
+assert_value worktrunk_bin 'C:\\tools\\wt.exe'
+
+printf '%s\n' 'open_mode = "tab" # note' > "$config_dir/config.toml"
+assert_value open_mode tab
+
+printf '%s\n' 'open_mode = "a # b" # note' > "$config_dir/config.toml"   # a quoted # is no comment
+assert_value open_mode 'a # b'
+
+printf '%s\n' "open_mode = 'a # b' # note" > "$config_dir/config.toml"
+assert_value open_mode 'a # b'
+
+printf '%s\n' "open_mode = 'say \"hi\"'" > "$config_dir/config.toml"
+assert_value open_mode 'say "hi"'
+
+printf '%s\n' "open_mode = ''" > "$config_dir/config.toml"
+assert_value open_mode ''
+
+printf '%s\n' 'open_mode = ""' > "$config_dir/config.toml"
+assert_value open_mode ''
+
+printf '%s\n' 'show_remote_branches = true # note' > "$config_dir/config.toml"
+assert_value show_remote_branches true
+
+printf ' \topen_mode = tab\n' > "$config_dir/config.toml"                 # leading whitespace
+assert_value open_mode tab
+
+printf '%s\n' 'open_mode="tab"' > "$config_dir/config.toml"
+assert_value open_mode tab
+
+printf '%s\n' 'open_mode = "tab"' 'open_mode = "workspace"' > "$config_dir/config.toml"   # last one wins
+assert_value open_mode workspace
+
+printf '%s\n' '# open_mode = "tab"' > "$config_dir/config.toml"           # commented out
+assert_value open_mode ''
+
+printf '%s\n' 'open_mode = "workspace"' '# open_mode = "tab"' > "$config_dir/config.toml"
+assert_value open_mode workspace
+
+# A key never matches a longer key that it is a prefix of, or another case.
+printf '%s\n' 'hold_on_success = true' > "$config_dir/config.toml"
+assert_value hold_on ''
+
+printf '%s\n' 'hold_on = "x"' 'hold_on_success = true' > "$config_dir/config.toml"
+assert_value hold_on x
+assert_value hold_on_success true
+
+printf '%s\n' 'OPEN_MODE = "tab"' > "$config_dir/config.toml"
+assert_value open_mode ''
+
+# Not TOML: a bare value can't hold a quote, so it reads as unset.
+printf '%s\n' "open_mode = it's" > "$config_dir/config.toml"
+assert_value open_mode ''
+
+# What a Windows editor may write: a UTF-8 BOM, CRLF line ends, non-ASCII text.
+printf '\357\273\277%s\n' 'open_mode = "tab"' > "$config_dir/config.toml"
+assert_value open_mode tab
+
+printf '%s\r\n' 'open_mode = "tab"' 'show_remote_branches = true' "worktrunk_bin = 'C:\tools\wt.exe' # literal" \
+  > "$config_dir/config.toml"
+assert_value open_mode tab
+assert_value show_remote_branches true
+assert_value worktrunk_bin 'C:\tools\wt.exe'
+
+printf '%s\n' "worktrunk_bin = 'C:\Users\Zoë\wt.exe'" > "$config_dir/config.toml"
+assert_value worktrunk_bin 'C:\Users\Zoë\wt.exe'
+
 assert_hold() {
   local action=$1 expected=$2 actual
   actual=$(worktrunk_hold_on "$action" 2>/dev/null)

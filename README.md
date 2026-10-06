@@ -101,7 +101,8 @@ integration's `wt` command that moves the shell into the worktree. Without it
 the worktree is still created, but the tab stays where it was; the plugin says
 so in the tab and leaves it labeled with the name you picked.
 
-Workspace mode (the default) calls `wt` directly and needs none of this.
+Workspace mode (the default) calls `wt` directly and needs none of this. On
+Windows, tab mode works differently; see [Windows](#windows).
 
 ## Remote branches in the picker
 
@@ -201,13 +202,59 @@ popup does not need, so the list fills the popup frame herdr already draws.
 
 ## Requirements
 
-- [**herdr**](https://herdr.dev) ≥ 0.7.0
+- [**herdr**](https://herdr.dev) ≥ 0.7.0 (Windows support was tested with
+  0.9.2-preview)
 - [**worktrunk**](https://github.com/max-sixty/worktrunk) ≥ 0.60.0 — the `wt` CLI on your `PATH`
 - **fzf** — the interactive picker
-- **jq** — JSON parsing
-- **bash** — the scripts run with `/bin/bash`
+- **jq** — JSON parsing (macOS/Linux only; the Windows scripts parse JSON natively)
+- **bash** — the scripts run with `/bin/bash` (macOS/Linux only)
 
-Platforms: macOS and Linux.
+Platforms: macOS, Linux, and Windows (herdr's Windows plugin support is in
+preview).
+
+### Windows
+
+Windows support can lag behind macOS and Linux, and a new feature may be
+missing on Windows for a while. Features land in the bash scripts first; their
+PowerShell ports come from contributors who can test on Windows. If something
+works on macOS or Linux but not on Windows, open an issue and say it is
+Windows.
+
+The actions run as Windows PowerShell 5.1 scripts (`*.ps1`) — nothing beyond
+stock Windows is needed for the scripts themselves, and jq is not used. Install
+the two external tools with winget:
+
+```powershell
+winget install max-sixty.worktrunk junegunn.fzf
+```
+
+Worktrunk's binary is named `wt.exe`, which collides with Windows Terminal's
+`wt.exe` launcher alias — and the alias usually wins on `PATH`. The plugin
+resolves worktrunk itself: it tries the `WORKTRUNK_BIN` environment variable,
+then `worktrunk_bin` in the plugin's `config.toml`, then a `worktrunk`/`wt` on
+`PATH` that is not the Windows Terminal alias, then `~\.cargo\bin\wt.exe`. If
+worktrunk lives somewhere unusual, point at it explicitly:
+
+```toml
+worktrunk_bin = 'C:\path\to\wt.exe'
+```
+
+Two Windows behaviors differ by design:
+
+- **Removal order.** Windows refuses to delete a directory that is any
+  process's cwd — and the worktree's own workspace pane is exactly such a
+  process. The remove and merge actions therefore close the worktree's herdr
+  UI *before* `wt remove` runs (the reverse of the Unix scripts), and reopen
+  the workspace if the removal then fails or is declined. Panes closed in tab
+  mode cannot be brought back that way — decline a removal there and its
+  shells stay closed. When the action runs from inside the worktree's own
+  workspace, that workspace is closed only after the removal succeeds. So
+  `hold_on_remove` and `hold_on_merge` wait for the key after the worktree's
+  workspace has already closed, except when the action runs inside it.
+- **Tab mode** (`open_mode = "tab"`) sends a PowerShell command into the new
+  tab, so it expects a PowerShell-family default shell. It does not rely on
+  worktrunk's shell integration: the sent command switches with `--no-cd` and
+  changes into the worktree directory itself.
 
 ## Installation
 
@@ -225,6 +272,11 @@ herdr plugin link /path/to/herdr-worktrunk
 ```
 
 ## Usage
+
+On Windows, append `-windows` to every action id below (`open-windows`,
+`open-current-windows`, `open-with-remotes-windows`, `remove-windows`,
+`merge-windows`, `merge-no-squash-windows`) — they are the same actions backed
+by the PowerShell scripts.
 
 ### Create/Switch a worktree from the default branch
 
@@ -253,9 +305,10 @@ herdr plugin action invoke remove --plugin worktrunk
 ## Keybindings
 
 To drive the plugin from the keyboard, add `[[keys.command]]` entries to
-`~/.config/herdr/config.toml` with `type = "plugin_action"`. The `command` is the
-plugin's action id qualified with the plugin id (`worktrunk.<action>`; run
-`herdr plugin action list` to see the ids):
+`~/.config/herdr/config.toml` (`%APPDATA%\herdr\config.toml` on Windows) with
+`type = "plugin_action"`. The `command` is the plugin's action id qualified
+with the plugin id (`worktrunk.<action>`; run `herdr plugin action list` to see
+the ids — on Windows use the `-windows` ids, e.g. `worktrunk.open-windows`):
 
 ```toml
 # Override herdr's built-in "new worktree" key (prefix+shift+g) with worktrunk's
@@ -309,18 +362,24 @@ herdr server reload-config
 
 ## Development
 
-The plugin is a manifest plus small bash scripts:
+The plugin is a manifest plus small bash scripts (macOS/Linux) and their
+Windows PowerShell 5.1 ports (`*.ps1`, Windows). The manifest declares every
+action and pane twice — once per platform set, with `-windows`-suffixed ids for
+the PowerShell twins — using herdr's item-level `platforms` overrides.
 
 - `herdr-plugin.toml` — actions and panes
-- `config.sh` — worktree and picker presentation configuration
-- `helpers.sh` — shared shell helpers (e.g. worktrunk shortcut detection)
-- `open.sh` — the action entrypoint that opens a picker in its configured placement
-- `picker.sh` — the switch / create picker
-- `tab-relabel.sh` — the relabel step tab mode types into the new tab after `wt switch`
-- `remove.sh` — the remove picker
-- `merge.sh` — the merge picker
-- `lifecycle.sh` — shared steps for the actions that destroy a worktree:
-  candidate listing, herdr workspace resolution, post-removal UI cleanup
+- `config.sh` / `config.ps1` — worktree and picker presentation configuration
+- `helpers.sh` / `helpers.ps1` — shared helpers (worktrunk shortcut detection;
+  on Windows also path normalization and worktrunk binary resolution)
+- `open.sh` / `open.ps1` — the action entrypoint that opens a picker in its
+  configured placement
+- `picker.sh` / `picker.ps1` — the switch / create picker
+- `tab-relabel.sh` — the relabel step tab mode types into the new tab after
+  `wt switch` (macOS/Linux; `picker.ps1` relabels inline)
+- `remove.sh` / `remove.ps1` — the remove picker
+- `merge.sh` / `merge.ps1` — the merge picker
+- `lifecycle.sh` / `lifecycle.ps1` — shared steps for the actions that destroy
+  a worktree: candidate listing, herdr workspace resolution, UI cleanup
 - `tests/config_test.sh` — configuration parser checks
 - `tests/helpers_test.sh` — helper function checks
 - `tests/lifecycle_test.sh` — candidate/workspace resolution and cleanup checks
@@ -329,6 +388,9 @@ The plugin is a manifest plus small bash scripts:
 - `tests/picker_test.sh` — switch / create picker checks in both open modes
 - `tests/remove_test.sh` — remove argument, failure-path and hold checks
 - `tests/tab_relabel_test.sh` — tab relabel checks
+- `tests/*_test.ps1` — Windows ports of the same checks (stubbing wt, fzf, and
+  herdr with generated `.cmd` shims); run them all with
+  `powershell -NoProfile -ExecutionPolicy Bypass -File tests\run_tests.ps1`
 
 herdr caches the manifest when a plugin is linked, so after editing
 `herdr-plugin.toml` you must relink for changes to take effect:
