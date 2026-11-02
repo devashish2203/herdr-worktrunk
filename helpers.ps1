@@ -179,3 +179,117 @@ function Resolve-WorktrunkBinOrExit {
   Start-Sleep -Seconds 2
   exit 1
 }
+
+function Get-WorktrunkPrNumber([string]$Name) {
+  if ($Name -cmatch '^pr:([0-9]+)$' -or
+      $Name -cmatch '^https://github\.com/[^/]+/[^/]+/pull/([0-9]+)([/#?].*)?$') {
+    return $Matches[1]
+  }
+  return ''
+}
+
+function Get-WorktrunkDefaultLabel([string]$Branch, [string]$Name) {
+  if (-not $Branch -or $Branch -ceq $Name) { return $Name }
+  return "$Branch ($Name)"
+}
+
+function Get-WorktrunkSwitchLabel([string]$Branch, [string]$Name, [string]$Repo = '', [string]$Pr = '') {
+  if (-not $Pr) { $Pr = Get-WorktrunkPrNumber $Name }
+  $preset = 'default'
+  $presetConfigured = Test-WorktrunkConfigKey 'label_preset'
+  if ($presetConfigured) { $preset = Get-WorktrunkLabelConfigValue 'label_preset' }
+  if ($preset -cnotin @('default', 'pr-first', 'branch-first', 'branch-only', 'pr-only')) {
+    Write-WtWarning "invalid label_preset $preset; using current naming behavior"
+    return Get-WorktrunkDefaultLabel $Branch $Name
+  }
+  $format = '{branch}'
+  if ($Pr) {
+    switch -CaseSensitive ($preset) {
+      'pr-first' { $format = '#{pr_number} {branch}' }
+      'branch-first' { $format = '{branch} ' + [char]0x00B7 + ' #{pr_number}' }
+      'pr-only' { $format = '#{pr_number}' }
+    }
+  }
+  $key = 'label_format'
+  if ($Pr) { $key = 'label_pr_format' }
+  if (Test-WorktrunkConfigKey $key) {
+    $format = Get-WorktrunkLabelConfigValue $key
+  } elseif ($preset -ceq 'default') {
+    if ($Pr -and ($presetConfigured -or $Name -ceq $Branch)) {
+      return Get-WorktrunkDefaultLabel $Branch ('pr:' + $Pr)
+    }
+    return Get-WorktrunkDefaultLabel $Branch $Name
+  }
+  $values = @{ branch = $Branch; selection = $Name; repo = $Repo }
+  if ($Pr) { $values['pr_number'] = $Pr }
+  $remaining = $format -creplace '\{(branch|selection|repo)\}', ''
+  if ($Pr) { $remaining = $remaining -creplace '\{pr_number\}', '' }
+  $invalid = $remaining.Contains('{') -or $remaining.Contains('}')
+  $label = [regex]::Replace($format, '\{(branch|selection|repo|pr_number)\}', {
+    param($m)
+    return [string]$values[$m.Groups[1].Value]
+  })
+  if ($invalid -or -not $label.Trim()) {
+    Write-WtWarning "invalid placeholders or empty label in $key; using current naming behavior"
+    return Get-WorktrunkDefaultLabel $Branch $Name
+  }
+  return $label
+}
+
+# Git's config codec keeps state portable without touching tracked files or the
+# repo config. Worktree removal also removes this private per-checkout state.
+# Only linked worktrees keep state: the main checkout belongs to the repository's
+# own workspace, which the plugin never relabels. A linked worktree's git dir is
+# the one with a commondir file, which works on any git with worktrees.
+function Get-WorktrunkLabelStateFile([string]$Path) {
+  $dir = git -C $Path rev-parse --absolute-git-dir 2>$null
+  if ($LASTEXITCODE -ne 0 -or -not $dir) { return '' }
+  if (-not (Test-Path -LiteralPath (Join-Path $dir 'commondir') -PathType Leaf)) { return '' }
+  return Join-Path $dir 'herdr-worktrunk-label'
+}
+
+function Get-WorktrunkPreparedLabel([string]$Path, [string]$Branch, [string]$Name,
+    [string]$Repo, [string]$Current = '') {
+  $file = Get-WorktrunkLabelStateFile $Path
+  $pr = Get-WorktrunkPrNumber $Name
+  $last = ''
+  if ($file -and (Test-Path -LiteralPath $file)) {
+    $oldBranch = git config --file $file --get label.branch 2>$null
+    if ($oldBranch -ceq $Branch) {
+      if (-not $pr) { $pr = git config --file $file --get label.pr 2>$null }
+      $last = git config --file $file --get label.generated 2>$null
+    }
+  }
+  return [pscustomobject]@{
+    File = $file; Pr = [string]$pr
+    Label = Get-WorktrunkSwitchLabel $Branch $Name $Repo ([string]$pr)
+    Managed = (-not $Current -or ($last -and $Current -ceq $last))
+  }
+}
+
+function Save-WorktrunkLabel($State, [string]$Branch) {
+  if (-not $State.File) { return }
+  # PowerShell 5.1 drops empty native arguments.
+  git config --file $State.File --unset-all label.branch 2>$null
+  if ($Branch) { git config --file $State.File label.branch (ConvertTo-WorktrunkNativeText $Branch) } else { $global:LASTEXITCODE = 0 }
+  if ($LASTEXITCODE -ne 0) { Write-WtWarning 'could not save worktrunk label metadata'; return }
+  git config --file $State.File --unset-all label.pr 2>$null
+  if ($State.Pr) { git config --file $State.File label.pr $State.Pr }
+  if ($State.Managed) { git config --file $State.File label.generated (ConvertTo-WorktrunkNativeText $State.Label) }
+  if ($LASTEXITCODE -ne 0 -and ($State.Pr -or $State.Managed)) {
+    Write-WtWarning 'could not save worktrunk label metadata'
+  }
+}
+
+# Windows PowerShell 5.1's native argv builder removes embedded double quotes.
+# Protect them for the Windows command-line decoder; modern PowerShell already
+# preserves them. Values still go directly to native argv, never to a shell.
+function ConvertTo-WorktrunkNativeText([string]$Text) {
+  if ($PSVersionTable.PSVersion.Major -le 5 -and $env:OS -eq 'Windows_NT') {
+    return [regex]::Replace($Text, '(\\*)"', {
+      param($m)
+      return ($m.Groups[1].Value + $m.Groups[1].Value + '\"')
+    })
+  }
+  return $Text
+}

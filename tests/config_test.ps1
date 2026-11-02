@@ -26,6 +26,24 @@ try {
 
   Assert-Eq 'workspace' (Get-WorktrunkOpenMode) 'mode'
 
+  # The key-presence and value readers must share extended-path handling.
+  Set-Content -LiteralPath $configFile -Value 'label_preset = "pr-first"'
+  $env:HERDR_PLUGIN_CONFIG_DIR = '\\?\' + $configDir
+  Assert-Eq $true (Test-WorktrunkConfigKey 'label_preset') 'extended-path key'
+  Assert-Eq 'pr-first' (Get-WorktrunkLabelConfigValue 'label_preset') 'extended-path label setting'
+  Assert-Eq 'pr-first' (Get-WorktrunkConfigValue 'label_preset') 'extended-path scalar setting'
+  $env:HERDR_PLUGIN_CONFIG_DIR = $configDir
+
+  # Inspect UNC normalization before Join-Path without contacting a server.
+  function Join-Path([string]$Path, [string]$ChildPath) { return $Path + '\' + $ChildPath }
+  try {
+    $env:HERDR_PLUGIN_CONFIG_DIR = '\\?\UNC\server\share\config'
+    Assert-Eq '\\server\share\config\config.toml' (Get-WorktrunkConfigFile) 'extended UNC config path'
+  } finally {
+    Remove-Item Function:\Join-Path
+    $env:HERDR_PLUGIN_CONFIG_DIR = $configDir
+  }
+
   Set-Content -LiteralPath $configFile -Value 'open_mode = "tab"'
   Assert-Eq 'tab' (Get-WorktrunkOpenMode) 'mode'
 

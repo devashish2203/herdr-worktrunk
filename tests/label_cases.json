@@ -1,0 +1,611 @@
+[
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "pr:123",
+    "pr": "",
+    "expected": "feature/login (pr:123)",
+    "warning": false,
+    "config": {}
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "origin/feature/login",
+    "pr": "",
+    "expected": "feature/login (origin/feature/login)",
+    "warning": false,
+    "config": {}
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "pr:123",
+    "pr": "",
+    "expected": "#123 feature/login",
+    "warning": false,
+    "config": {
+      "label_preset": "pr-first"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": false,
+    "config": {
+      "label_preset": "pr-first"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "pr:123",
+    "pr": "",
+    "expected": "feature/login · #123",
+    "warning": false,
+    "config": {
+      "label_preset": "branch-first"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": false,
+    "config": {
+      "label_preset": "branch-first"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "pr:123",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": false,
+    "config": {
+      "label_preset": "branch-only"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": false,
+    "config": {
+      "label_preset": "branch-only"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "pr:123",
+    "pr": "",
+    "expected": "#123",
+    "warning": false,
+    "config": {
+      "label_preset": "pr-only"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": false,
+    "config": {
+      "label_preset": "pr-only"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "pr:123",
+    "pr": "",
+    "expected": "feature/login (pr:123)",
+    "warning": false,
+    "config": {
+      "label_preset": "default"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": false,
+    "config": {
+      "label_preset": "default"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "https://github.com/o/r/pull/123",
+    "pr": "",
+    "expected": "#123 feature/login",
+    "warning": false,
+    "config": {
+      "label_preset": "pr-first"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "https://github.com/o/r/pull/123/files?x=1",
+    "pr": "",
+    "expected": "#123 feature/login",
+    "warning": false,
+    "config": {
+      "label_preset": "pr-first"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "my repo: feature/login [feature/login]",
+    "warning": false,
+    "config": {
+      "label_preset": "pr-first",
+      "label_format": "{repo}: {branch} [{selection}]"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "pr:123",
+    "pr": "",
+    "expected": "#123 feature/login",
+    "warning": false,
+    "config": {
+      "label_preset": "pr-first",
+      "label_format": "{repo}"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "pr:123",
+    "pr": "",
+    "expected": "#123 · feature/login",
+    "warning": false,
+    "config": {
+      "label_preset": "pr-only",
+      "label_pr_format": "#{pr_number} · {branch}"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "雪 {selection}",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "雪 {selection} $(touch /tmp/label-injection) `id` & \\ feature/login",
+    "warning": false,
+    "config": {
+      "label_format": "{repo} $(touch /tmp/label-injection) `id` & \\ {branch}"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {
+      "label_preset": "oops"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {
+      "label_format": "{unknown}"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {
+      "label_format": "{pr_number}"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {
+      "label_format": ""
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {
+      "label_format": "   "
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {
+      "label_format": "{Branch}"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {
+      "label_format": "{branch"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {
+      "label_format": "branch}"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "pr:123",
+    "pr": "",
+    "expected": "feature/login (pr:123)",
+    "warning": true,
+    "config": {
+      "label_pr_format": "{unknown}"
+    }
+  },
+  {
+    "branch": "",
+    "repo": "my repo",
+    "selection": "pr:123",
+    "pr": "",
+    "expected": "pr:123",
+    "warning": true,
+    "config": {
+      "label_format": "{branch}",
+      "label_pr_format": "{branch}"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "雪 {selection}",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "\"雪 {selection}\" & feature/login",
+    "warning": false,
+    "config": {
+      "label_format": "\"{repo}\" & {branch}"
+    }
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "☃ feature/login",
+    "warning": false,
+    "config": {},
+    "config_raw": "label_format = \"\\u2603 {branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "🚀 feature/login",
+    "warning": false,
+    "config": {},
+    "config_raw": "label_format = \"\\U0001F680 {branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "\"feature/login\"",
+    "warning": false,
+    "config": {},
+    "config_raw": "label_format = \"\\\"{branch}\\\"\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login \\ \t $HOME `id` &",
+    "warning": false,
+    "config": {},
+    "config_raw": "label_format = \"{branch} \\\\ \\t $HOME `id` &\" # comment"
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "\\u2603 feature/login",
+    "warning": false,
+    "config": {},
+    "config_raw": "label_format = '\\u2603 {branch}'"
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "123",
+    "expected": "#123 feature/login",
+    "warning": false,
+    "config": {},
+    "config_raw": "label_preset = \"pr-\\u0066irst\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "123",
+    "expected": "☃ #123 \"feature/login\"",
+    "warning": false,
+    "config": {},
+    "config_raw": "label_pr_format = \"\\u2603 #{pr_number} \\\"{branch}\\\"\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_format = \"\\q {branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_format = \"\\B {branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_format = \"\\uD800 {branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_format = \"\\U00110000 {branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_format = \"\\u0000 {branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_format = \"\\u123 {branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_format = \"{branch}\\\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "123",
+    "expected": "feature/login (pr:123)",
+    "warning": false,
+    "config": {},
+    "config_raw": "label_preset = \"default\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "https://github.com/o/r/pull/123",
+    "pr": "123",
+    "expected": "feature/login (pr:123)",
+    "warning": false,
+    "config": {},
+    "config_raw": "label_preset = \"default\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "123",
+    "expected": "feature/login (pr:123)",
+    "warning": false,
+    "config": {},
+    "config_raw": ""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_format = \"a\\nb {branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_format = \"{branch}\\n\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_format = \"\\r{branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_format = \"\\u0007{branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_format = \"\\u007F{branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_format = \"\\b{branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "pr:123",
+    "pr": "",
+    "expected": "feature/login (pr:123)",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_pr_format = \"#{pr_number}\\n{branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "123",
+    "expected": "feature/login",
+    "warning": true,
+    "config": {},
+    "config_raw": "label_preset = \"pr-first\\n\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "feature/login",
+    "pr": "",
+    "expected": "\tfeature/login",
+    "warning": false,
+    "config": {},
+    "config_raw": "label_format = \"\\t{branch}\""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "https://github.com/o/r/pull/123",
+    "pr": "123",
+    "expected": "feature/login (https://github.com/o/r/pull/123)",
+    "warning": false,
+    "config": {},
+    "config_raw": ""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "origin/feature/login",
+    "pr": "123",
+    "expected": "feature/login (origin/feature/login)",
+    "warning": false,
+    "config": {},
+    "config_raw": ""
+  },
+  {
+    "branch": "feature/login",
+    "repo": "my repo",
+    "selection": "origin/feature/login",
+    "pr": "123",
+    "expected": "feature/login (pr:123)",
+    "warning": false,
+    "config": {},
+    "config_raw": "label_preset = \"default\""
+  }
+]
