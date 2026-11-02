@@ -24,6 +24,7 @@ herdr=$1 tab_id=$2 name=$3 start=$4
 
 plugin_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=./helpers.sh
+source "$plugin_root/config.sh"
 source "$plugin_root/helpers.sh"
 
 branch=$(git branch --show-current 2>/dev/null)
@@ -38,7 +39,12 @@ if [[ $branch != "$name" && $(pwd -P) == "$(cd -- "$start" 2>/dev/null && pwd -P
   printf '\033[33m%s\033[0m\n' "$hint" >&2
   label=$name
 else
-  label=$(worktrunk_switch_label "$branch" "$name")
+  repo=$("$herdr" worktree list --cwd "$PWD" --json 2>/dev/null | jq -r '.result.source.repo_name // empty')
+  worktrunk_prepare_label "$PWD" "$branch" "$name" "${repo%.git}"
+  label=$WORKTRUNK_LABEL
+  # Tabs are always new; do not replace the workspace's last generated label.
+  WORKTRUNK_MANAGED=false
+  worktrunk_save_label "$branch"
 fi
 
 exec "$herdr" tab rename "$tab_id" "$label" >/dev/null

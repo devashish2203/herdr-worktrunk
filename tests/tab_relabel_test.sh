@@ -10,6 +10,10 @@ trap 'rm -rf "$stub_dir" "$work_dir"' EXIT
 # herdr stub: records every call it gets.
 cat > "$stub_dir/herdr" <<'STUB'
 #!/usr/bin/env bash
+if [[ $1 == worktree && $2 == list ]]; then
+  printf '%s\n' '{"result":{"source":{"repo_name":"repo"}}}'
+  exit
+fi
 printf '%s\n' "$*" >> "$HERDR_STUB_LOG"
 STUB
 chmod +x "$stub_dir/herdr"
@@ -94,6 +98,27 @@ assert_eq '' "$relabel_stderr" 'stderr'
 run_relabel "$repo" main "$repo"
 assert_eq 'tab rename w1V:t3 main' "$(cat "$HERDR_STUB_LOG")" 'herdr call'
 assert_eq '' "$relabel_stderr" 'stderr'
+
+# Configured tab labels use the same templates and retained PR as workspaces.
+linked="$work_dir/linked"
+git -C "$repo" worktree add --quiet -b feat/login "$linked"
+export HERDR_PLUGIN_CONFIG_DIR="$stub_dir/config"
+mkdir -p "$HERDR_PLUGIN_CONFIG_DIR"
+printf 'label_preset = "pr-first"\n' > "$HERDR_PLUGIN_CONFIG_DIR/config.toml"
+run_relabel "$linked" https://github.com/o/r/pull/123 "$elsewhere"
+assert_eq 'tab rename w1V:t3 #123 feat/login' "$(cat "$HERDR_STUB_LOG")" 'herdr call'
+run_relabel "$linked" feat/login "$elsewhere"
+assert_eq 'tab rename w1V:t3 #123 feat/login' "$(cat "$HERDR_STUB_LOG")" 'herdr call'
+printf "label_pr_format = '{repo}: #{pr_number} {branch}'\n" > "$HERDR_PLUGIN_CONFIG_DIR/config.toml"
+run_relabel "$linked" feat/login "$elsewhere"
+assert_eq 'tab rename w1V:t3 repo: #123 feat/login' "$(cat "$HERDR_STUB_LOG")" 'herdr call'
+
+# The main checkout formats a PR it is handed but keeps no state for it.
+run_relabel "$repo" https://github.com/o/r/pull/7 "$elsewhere"
+assert_eq 'tab rename w1V:t3 repo: #7 main' "$(cat "$HERDR_STUB_LOG")" 'herdr call'
+run_relabel "$repo" main "$elsewhere"
+assert_eq 'tab rename w1V:t3 main' "$(cat "$HERDR_STUB_LOG")" 'herdr call'
+[[ ! -e $repo/.git/herdr-worktrunk-label ]] || { echo 'unexpected main checkout label state' >&2; exit 1; }
 
 # Missing arguments are a plugin bug, not a rename to attempt.
 : > "$HERDR_STUB_LOG"
