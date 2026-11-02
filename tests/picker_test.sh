@@ -40,7 +40,7 @@ printf '%s ' "$@" > "$STUB_DIR/wt.args"
 [[ $WT_STUB_SWITCH_STATUS != 0 ]] && exit "$WT_STUB_SWITCH_STATUS"
 branch=${2:-}
 [[ $branch == --create ]] && branch=${3:-}
-printf '{"action":"%s","branch":"%s","path":"%s"}\n' "$WT_STUB_ACTION" "$branch" "$STUB_DIR/checkout"
+printf '{"action":"%s","branch":"%s","path":"%s"}\n' "$WT_STUB_ACTION" "${WT_STUB_BRANCH:-$branch}" "${WT_STUB_PATH:-$STUB_DIR/checkout}"
 EOF
 
 # herdr stub: `worktree list` locates the repo root and `worktree open` is the
@@ -52,7 +52,15 @@ cat > "$stub_dir/herdr" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$STUB_DIR/herdr.log"
 case "${1:-} ${2:-}" in
+  "workspace list")
+    jq -n --arg label "${HERDR_STUB_LABEL:-}" '{result:{workspaces:[{workspace_id:"w2",label:$label}]}}'
+    ;;
   "worktree list")
+    if [[ -n ${HERDR_STUB_LABEL:-} ]]; then
+      jq -n --arg path "$WT_STUB_PATH" --arg root "$REPO_CWD" \
+        '{result:{source:{repo_root:$root,repo_name:"repo",source_workspace_id:"w1"},worktrees:[{path:$path,open_workspace_id:"w2"}]}}'
+      exit
+    fi
     printf '{"result":{"source":{"repo_root":"%s","repo_name":"repo","source_workspace_id":"w1"}}}\n' "$REPO_CWD"
     ;;
   "worktree open")
@@ -262,7 +270,7 @@ HERDR_STUB_SHELL=nu run_picker $'silas/brand-new' 1
 assert_eq "print -n (wt switch --create 'silas/brand-new'); bash '$relabel' '$stub_dir/herdr' 'w1V:t3' 'silas/brand-new' '$repo_cwd'" \
   "$(pane_run_args)" 'pane run line'
 assert_eq '' "$(wt_args)" 'wt argv'
-assert_eq $'tab\ncreate\n--workspace\nw1\n--cwd\n'"$repo_cwd"$'\n--label\nsilas/brand-new\n--focus' \
+assert_eq $'tab\ncreate\n--workspace\nw1\n--cwd\n'"$repo_cwd"$'\n--label\nsilas/brand-new\n--env\nHERDR_PLUGIN_CONFIG_DIR='"$config_dir"$'\n--focus' \
   "$(cat "$stub_dir/tab_create.args")" 'tab create argv'
 assert_contains 'pane process-info --pane w1V:p5' "$(herdr_log)" 'herdr calls'
 assert_contains 'pane run w1V:p5 ' "$(herdr_log)" 'herdr calls'
@@ -296,5 +304,37 @@ assert_contains 'pane run w1V:p5 ' "$(herdr_log)" 'herdr calls'
 # esc still cancels before any tab is opened.
 run_picker '' 130
 assert_eq '' "$(herdr_log)" 'herdr calls'
+
+# Workspace integration: real Git metadata survives PR -> branch reopening,
+# setting changes apply, manual labels are omitted from the update argv, and the
+# main checkout never receives --label.
+git -C "$work_dir/repo" worktree add -q -b feature/login "$work_dir/linked"
+export WT_STUB_BRANCH=feature/login WT_STUB_PATH="$work_dir/linked"
+printf 'label_preset = "pr-first"\n' > "$config_dir/config.toml"
+run_picker pr:123 1
+assert_contains '--label #123 feature/login' "$(herdr_log)"
+export HERDR_STUB_LABEL='#123 feature/login'
+run_picker feature/login 0
+assert_contains '--label #123 feature/login' "$(herdr_log)"
+printf 'label_preset = "pr-only"\n' > "$config_dir/config.toml"
+run_picker feature/login 0
+assert_contains '--label #123' "$(herdr_log)"
+export HERDR_STUB_LABEL='My manual title'
+run_picker feature/login 0
+refute_contains '--label' "$(herdr_log)"
+# A subsequent open still preserves that manual title and retains PR metadata,
+# and the hold names the worktree by the title it keeps.
+printf 'label_preset = "pr-only"\nhold_on_create = true\n' > "$config_dir/config.toml"
+run_picker feature/login 0
+refute_contains '--label' "$(herdr_log)"
+assert_contains 'created worktree My manual title.' "$(pane_out)" 'pane output'
+assert_eq 123 "$(git config --file "$work_dir/repo/.git/worktrees/linked/herdr-worktrunk-label" label.pr)" 'saved PR'
+# The main checkout's existing workspace keeps its name, and no state is kept
+# for it.
+: > "$config_dir/config.toml"
+export WT_STUB_PATH="$work_dir/repo" WT_STUB_BRANCH=main HERDR_STUB_LABEL=repo
+run_picker main 0
+refute_contains '--label' "$(herdr_log)"
+[[ ! -e $work_dir/repo/.git/herdr-worktrunk-label ]] || { echo 'unexpected main checkout label state' >&2; exit 1; }
 
 printf 'picker_test: ok\n'

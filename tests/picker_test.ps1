@@ -58,25 +58,32 @@ try {
     'exit /b 0'
   )
 
-  # herdr stub: `worktree list` locates the repo root, `worktree open` is the
-  # result, echoed into the pane too so a message can be placed before or after
-  # it. In tab mode `tab create` answers with a pane, and `pane run` records the
-  # line typed into it. Labels instead of ( ) blocks: the recorded argv may hold
+  # herdr stub: `worktree list` locates the repo root (and which checkouts have a
+  # workspace open), `workspace list` labels them, `worktree open` is the result,
+  # echoed into the pane too so a message can be placed before or after it. In
+  # tab mode `tab create` answers with a pane, and `pane run` records the line
+  # typed into it. Labels instead of ( ) blocks: the recorded argv may hold
   # parentheses.
   $worktreeJson = Join-Path $stubDir 'worktrees.json'
   @{ result = @{ source = @{ repo_root = $repo; repo_name = 'repo'; source_workspace_id = 'w1' } } } |
     ConvertTo-Json -Compress -Depth 5 | Set-Content -LiteralPath $worktreeJson
+  $workspaceJson = Join-Path $stubDir 'workspaces.json'
+  Set-Content -LiteralPath $workspaceJson -Value '{"result":{"workspaces":[]}}'
   $tabJson = Join-Path $stubDir 'tab.json'
   Set-Content -LiteralPath $tabJson -Value '{"result":{"root_pane":{"pane_id":"p5","tab_id":"t5"}}}'
   Set-Content -LiteralPath (Join-Path $stubDir 'herdr.cmd') -Value @(
     '@echo off',
     'if "%~1 %~2"=="worktree list" goto worktreelist',
+    'if "%~1 %~2"=="workspace list" goto workspacelist',
     '>> "%STUB_DIR%\herdr.args" echo %*',
     'if "%~1 %~2"=="tab create" goto tabcreate',
     'echo %*',
     'exit /b 0',
     ':worktreelist',
     'type "%HERDR_WORKTREE_JSON%"',
+    'exit /b 0',
+    ':workspacelist',
+    'type "%HERDR_WORKSPACE_JSON%"',
     'exit /b 0',
     ':tabcreate',
     'type "%HERDR_TAB_JSON%"',
@@ -88,6 +95,7 @@ try {
   $env:WT_STUB_LIST_FILE = $listFile
   $env:WT_STUB_SWITCH_JSON = $switchJson
   $env:HERDR_WORKTREE_JSON = $worktreeJson
+  $env:HERDR_WORKSPACE_JSON = $workspaceJson
   $env:HERDR_TAB_JSON = $tabJson
   $env:WT_STUB_SWITCH_STATUS = '0'
   $env:WORKTRUNK_BIN = Join-Path $stubDir 'wt.cmd'
@@ -101,9 +109,19 @@ try {
 
   # What `wt switch` answers, as worktrunk does: ACTION says whether it
   # `created` the worktree or switched to an `existing` one.
-  function Set-SwitchResult([string]$Action, [string]$Branch) {
-    @{ action = $Action; branch = $Branch; path = (Join-Path $stubDir 'checkout') } |
+  function Set-SwitchResult([string]$Action, [string]$Branch, [string]$Path = (Join-Path $stubDir 'checkout')) {
+    @{ action = $Action; branch = $Branch; path = $Path } |
       ConvertTo-Json -Compress | Set-Content -LiteralPath $switchJson
+  }
+
+  # A workspace already open on PATH, labeled LABEL.
+  function Set-OpenWorkspace([string]$Path, [string]$Label) {
+    @{ result = @{
+        source = @{ repo_root = $repo; repo_name = 'repo'; source_workspace_id = 'w1' }
+        worktrees = @(@{ path = $Path; open_workspace_id = 'w2' })
+      } } | ConvertTo-Json -Compress -Depth 6 | Set-Content -LiteralPath $worktreeJson
+    @{ result = @{ workspaces = @(@{ workspace_id = 'w2'; label = $Label }) } } |
+      ConvertTo-Json -Compress -Depth 5 | Set-Content -LiteralPath $workspaceJson
   }
 
   # Run picker.ps1 with the scripted fzf result. $pickerExit then holds its exit
@@ -225,6 +243,13 @@ try {
   Invoke-Picker @('Optimize Stripe') '1'
   Assert-Contains '--label optimize-stripe ' (Get-HerdrArgs) 'tab create argv'
   Assert-Contains "switch --create 'optimize-stripe' --no-cd --format=json" (Get-HerdrArgs) 'pane run line'
+  # The tab gets the config dir, and the relabel runs as its own process past the
+  # interactive shell's execution policy.
+  Assert-Contains '--env ' (Get-HerdrArgs) 'tab create argv'
+  Assert-Contains "HERDR_PLUGIN_CONFIG_DIR=$configDir" (Get-HerdrArgs) 'tab create argv'
+  Assert-Contains ("& powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File '" +
+    (Join-Path $repoRoot 'tab-relabel.ps1') + "'") (Get-HerdrArgs) 'pane run line'
+  Assert-Contains "'t5' 'optimize-stripe'" (Get-HerdrArgs) 'pane run line'
   Set-Content -LiteralPath $configFile -Value $null
 
   # A created worktree opens its workspace without waiting.
@@ -272,10 +297,43 @@ try {
   Refute-Pane 'press any key to continue'
   Assert-Contains 'pane run p5 ' (Get-HerdrArgs) 'herdr calls'
   Set-Content -LiteralPath $configFile -Value $null
+
+  # Workspace labels: real Git metadata survives PR -> branch reopening, setting
+  # changes apply, manual labels are omitted from the update argv (and named by
+  # the hold), and the main checkout never receives --label or keeps state.
+  $linked = Join-Path $workDir 'linked'
+  git -C $repo worktree add --quiet -b feature/login $linked
+  Set-SwitchResult 'existing' 'feature/login' $linked
+  Set-Content -LiteralPath $configFile -Value 'label_preset = "pr-first"'
+  Invoke-Picker @('pr:123') '1'
+  Assert-Contains '--label "#123 feature/login"' (Get-HerdrArgs) 'worktree open argv'
+  Set-OpenWorkspace $linked '#123 feature/login'
+  Invoke-Picker @('feature/login') '0'
+  Assert-Contains '--label "#123 feature/login"' (Get-HerdrArgs) 'worktree open argv'
+  Set-Content -LiteralPath $configFile -Value 'label_preset = "pr-only"'
+  Invoke-Picker @('feature/login') '0'
+  Assert-Contains '--label #123 --focus' (Get-HerdrArgs) 'worktree open argv'
+  Set-OpenWorkspace $linked 'My manual title'
+  Invoke-Picker @('feature/login') '0'
+  Refute-Contains '--label' (Get-HerdrArgs) 'worktree open argv'
+  Set-Content -LiteralPath $configFile -Value @('label_preset = "pr-only"', 'hold_on_create = true')
+  Set-SwitchResult 'created' 'feature/login' $linked
+  Invoke-Picker @('feature/login') '0'
+  Refute-Contains '--label' (Get-HerdrArgs) 'worktree open argv'
+  Assert-Pane 'created worktree My manual title\.'
+  $savedPr = git config --file (Join-Path $repo '.git\worktrees\linked\herdr-worktrunk-label') label.pr
+  Assert-Eq '123' $savedPr 'saved PR'
+  Set-Content -LiteralPath $configFile -Value $null
+  Set-SwitchResult 'existing' 'main' $repo
+  Set-OpenWorkspace $repo 'repo'
+  Invoke-Picker @('main') '0'
+  Assert-Contains 'worktree open ' (Get-HerdrArgs) 'herdr calls'
+  Refute-Contains '--label' (Get-HerdrArgs) 'worktree open argv'
+  if (Test-Path -LiteralPath (Join-Path $repo '.git\herdr-worktrunk-label')) { Fail 'unexpected main checkout label state' }
 } finally {
   $env:Path = $origPath
   foreach ($name in 'STUB_DIR', 'WT_STUB_LIST_FILE', 'WT_STUB_SWITCH_JSON', 'WT_STUB_SWITCH_STATUS',
-                    'HERDR_WORKTREE_JSON', 'HERDR_TAB_JSON',
+                    'HERDR_WORKTREE_JSON', 'HERDR_WORKSPACE_JSON', 'HERDR_TAB_JSON',
                     'WORKTRUNK_BIN', 'HERDR_PLUGIN_ROOT', 'HERDR_BIN_PATH', 'HERDR_PLUGIN_CONFIG_DIR',
                     'HERDR_WORKSPACE_ID', 'FZF_STUB_OUT_FILE', 'FZF_STUB_EXIT') {
     Remove-Item "Env:\$name" -ErrorAction SilentlyContinue

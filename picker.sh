@@ -108,7 +108,9 @@ if [[ $open_mode == tab ]]; then
   # Run wt in a new tab's interactive shell rather than here: only that shell can
   # cd itself into the worktree (through worktrunk's shell integration), and the
   # hook output then lands in the pane the user keeps, not in this transient one.
-  tab_json=$("$herdr" tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$PWD" --label "$name" --focus)
+  tab_env=()
+  [[ -z ${HERDR_PLUGIN_CONFIG_DIR:-} ]] || tab_env=(--env "HERDR_PLUGIN_CONFIG_DIR=$HERDR_PLUGIN_CONFIG_DIR")
+  tab_json=$("$herdr" tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$PWD" --label "$name" "${tab_env[@]}" --focus)
   newpane=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.pane_id // empty')
   tab_id=$(printf '%s\n' "$tab_json" | jq -r '.result.root_pane.tab_id // empty')
   [[ -z $newpane || -z $tab_id ]] && { printf '\033[31m%s\033[0m\n' "failed to open worktree tab"; sleep 2; exit 1; }
@@ -137,7 +139,6 @@ fi
 # $name may be a worktrunk shortcut rather than the actual branch: label with what
 # it resolved to (see worktrunk_switch_label).
 branch=$(printf '%s\n' "$result" | jq -r '.branch // empty' 2>/dev/null)
-label=$(worktrunk_switch_label "$branch" "$name")
 
 wtpath=$(printf '%s\n' "$result" | jq -r '.path // empty' 2>/dev/null)
 if [[ -z $wtpath ]]; then
@@ -150,13 +151,6 @@ if [[ -z $wtpath ]]; then
   printf '\033[31m%s\033[0m\n' "worktrunk returned no worktree path for: $name"
   sleep 2
   exit 1
-fi
-
-# Only a worktree worktrunk just created has hook output worth reading; a switch to
-# an existing one opens straight away. Hold before the workspace opens below — it
-# takes the focus with it.
-if [[ $(printf '%s\n' "$result" | jq -r '.action // empty' 2>/dev/null) == created ]]; then
-  worktrunk_hold_pane create "created worktree $label."
 fi
 
 # Register the worktree under the repo's ROOT workspace, not the picker pane's
@@ -172,21 +166,55 @@ repo_root=$(printf '%s\n' "$source_json" | jq -r '.result.source.repo_root')
 # rather than the repository's name. Pre-create it labeled correctly so the
 # `worktree open` below reuses it as-is instead of defaulting the label.
 root_workspace_id=$(printf '%s\n' "$source_json" | jq -r '.result.source.source_workspace_id // empty')
+repo_label=$(printf '%s\n' "$source_json" | jq -r '.result.source.repo_name // empty')
+repo_label=${repo_label%.git}
 if [[ -z $root_workspace_id ]]; then
-  repo_label=$(printf '%s\n' "$source_json" | jq -r '.result.source.repo_name // empty')
-  repo_label=${repo_label%.git}
   [[ -n $repo_label ]] && "$herdr" workspace create --cwd "$repo_root" --label "$repo_label" --no-focus >/dev/null
 fi
 
-# Picking the main/root branch itself resolves wtpath to repo_root — there's no
-# separate linked-worktree workspace to label, it's the repo's own workspace.
-# Passing --label here would rename that workspace to the branch (e.g. "main"),
-# clobbering the repo-name label set above. Compare canonicalized paths since
-# repo_root and wtpath may resolve symlinks differently (e.g. macOS /tmp).
-label_args=(--label "$label")
+# Update only linked workspaces still carrying the plugin's last generated label.
+workspace_id=''
+while IFS= read -r tree; do
+  tree_path=$(printf '%s' "$tree" | jq -r '.path // empty')
+  if [[ -n $tree_path && "$(cd "$tree_path" 2>/dev/null && pwd -P)" == "$(cd "$wtpath" 2>/dev/null && pwd -P)" ]]; then
+    workspace_id=$(printf '%s' "$tree" | jq -r '.open_workspace_id // empty')
+    break
+  fi
+done < <(printf '%s' "$source_json" | jq -c '.result.worktrees[]?')
+current_label=''
+if [[ -n $workspace_id ]]; then
+  current_label=$("$herdr" workspace list 2>/dev/null | jq -r --arg id "$workspace_id" \
+    '.result.workspaces[]? | select(.workspace_id == $id) | .label // empty')
+  current_label=${current_label:-?}
+fi
+worktrunk_prepare_label "$wtpath" "$branch" "$name" "$repo_label" "$current_label"
+label_args=()
+[[ $WORKTRUNK_MANAGED != true ]] || label_args=(--label "$WORKTRUNK_LABEL")
+# The main checkout is the repository's own workspace: --label would rename it to
+# the branch. Compare canonicalized paths since repo_root and wtpath may resolve
+# symlinks differently (e.g. macOS /tmp).
 if [[ "$(cd "$wtpath" 2>/dev/null && pwd -P)" == "$(cd "$repo_root" 2>/dev/null && pwd -P)" ]]; then
   label_args=()
 fi
 
-exec "$herdr" worktree open --cwd "$repo_root" \
-  --path "$wtpath" "${label_args[@]}" --focus --json
+# Name the worktree by the label it keeps: a manual one stays in place.
+shown_label=$WORKTRUNK_LABEL
+if [[ $WORKTRUNK_MANAGED != true ]]; then
+  shown_label=$current_label
+  [[ $shown_label != '?' ]] || shown_label=${branch:-$name}
+fi
+
+# Only a worktree worktrunk just created has hook output worth reading; a switch to
+# an existing one opens straight away. Hold before the workspace opens below — it
+# takes the focus with it.
+if [[ $(printf '%s\n' "$result" | jq -r '.action // empty' 2>/dev/null) == created ]]; then
+  worktrunk_hold_pane create "created worktree $shown_label."
+fi
+
+# The main checkout keeps no label state, so saving is a no-op there.
+if "$herdr" worktree open --cwd "$repo_root" \
+  --path "$wtpath" "${label_args[@]}" --focus --json; then
+  worktrunk_save_label "$branch"
+else
+  exit $?
+fi

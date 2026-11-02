@@ -38,6 +38,18 @@ function Wait-WtAnyKey {
   }
 }
 
+# Resolve the managed config path once so presence and value readers apply the
+# same Windows extended-path normalization.
+function Get-WorktrunkConfigFile {
+  $configDir = $env:HERDR_PLUGIN_CONFIG_DIR
+  if (-not $configDir) { return '' }
+  # Like HERDR_PLUGIN_ROOT, the config dir may arrive in extended-length form
+  # (\\?\C:\...), which Join-Path rejects in Windows PowerShell.
+  if ($configDir.StartsWith('\\?\UNC\')) { $configDir = '\\' + $configDir.Substring(8) }
+  elseif ($configDir.StartsWith('\\?\')) { $configDir = $configDir.Substring(4) }
+  return Join-Path $configDir 'config.toml'
+}
+
 # Print the configured value for KEY from the plugin's managed config.toml, or
 # '' when unset. Accepts double-quoted strings (open_mode = "tab"),
 # single-quoted TOML literals (worktrunk_bin = 'C:\path\to\wt.exe' - the
@@ -47,13 +59,8 @@ function Wait-WtAnyKey {
 # case-sensitively (as in TOML), and the file is read as UTF-8 rather than
 # Windows PowerShell's ANSI default; Get-Content drops a BOM if there is one.
 function Get-WorktrunkConfigValue([string]$Key) {
-  $configDir = $env:HERDR_PLUGIN_CONFIG_DIR
-  if (-not $configDir) { return '' }
-  # Like HERDR_PLUGIN_ROOT, the config dir may arrive in extended-length form
-  # (\\?\C:\...), which Join-Path rejects in Windows PowerShell.
-  if ($configDir.StartsWith('\\?\UNC\')) { $configDir = '\\' + $configDir.Substring(8) }
-  elseif ($configDir.StartsWith('\\?\')) { $configDir = $configDir.Substring(4) }
-  $configFile = Join-Path $configDir 'config.toml'
+  $configFile = Get-WorktrunkConfigFile
+  if (-not $configFile) { return '' }
   if (-not (Test-Path -LiteralPath $configFile)) { return '' }
 
   $value = ''
@@ -179,4 +186,59 @@ function Get-WorktrunkMergeFlags {
   }
   # Unrolled on return; callers collect with @(Get-WorktrunkMergeFlags).
   return $flags
+}
+
+function Test-WorktrunkConfigKey([string]$Key) {
+  $file = Get-WorktrunkConfigFile
+  if (-not $file) { return $false }
+  if (-not (Test-Path -LiteralPath $file)) { return $false }
+  return [bool](@(Get-Content -LiteralPath $file -Encoding UTF8 | Where-Object {
+    $_ -cmatch ('^\s*' + [regex]::Escape($Key) + '\s*=')
+  }).Count)
+}
+
+# Single-line TOML strings for label settings. Invalid escapes return an empty
+# value so the formatter emits its normal warning and uses the legacy label, as
+# do control characters other than tab: labels are single-line.
+function Get-WorktrunkLabelConfigValue([string]$Key) {
+  $value = Get-WorktrunkLabelConfigText $Key
+  if ($value -cmatch '[\x00-\x08\x0A-\x1F\x7F]') { return '' }
+  return $value
+}
+
+function Get-WorktrunkLabelConfigText([string]$Key) {
+  $file = Get-WorktrunkConfigFile
+  if (-not $file -or -not (Test-Path -LiteralPath $file)) { return '' }
+  $raw = ''
+  foreach ($line in (Get-Content -LiteralPath $file -Encoding UTF8)) {
+    if ($line -cmatch ('^\s*' + [regex]::Escape($Key) + '\s*=\s*(.*)$')) { $raw = $Matches[1] }
+  }
+  if ($raw -cnotmatch '^("(?:[^"\\]|\\.)*"|''[^'']*''|[^\s#"'']+)\s*(#.*)?$') { return '' }
+  $raw = $Matches[1]
+  if ($raw.StartsWith("'")) { return $raw.Substring(1, $raw.Length - 2) }
+  if (-not $raw.StartsWith('"')) { return $raw }
+  $body = $raw.Substring(1, $raw.Length - 2)
+  $decoded = New-Object Text.StringBuilder
+  $escapes = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+  $escapes['b'] = [string][char]8; $escapes['t'] = [string][char]9; $escapes['n'] = [string][char]10
+  $escapes['f'] = [string][char]12; $escapes['r'] = [string][char]13; $escapes['"'] = '"'; $escapes['\'] = '\'
+  for ($i = 0; $i -lt $body.Length; $i++) {
+    if ($body[$i] -cne [char]92) { [void]$decoded.Append($body[$i]); continue }
+    $i++
+    if ($i -ge $body.Length) { return '' }
+    $escape = [string]$body[$i]
+    if ($escapes.ContainsKey($escape)) { [void]$decoded.Append($escapes[$escape]); continue }
+    $width = 0
+    if ($escape -ceq 'u') { $width = 4 } elseif ($escape -ceq 'U') { $width = 8 }
+    if (-not $width -or $i + $width -ge $body.Length) { return '' }
+    $hex = $body.Substring($i + 1, $width)
+    if ($hex -cnotmatch '^[0-9A-Fa-f]+$') { return '' }
+    try {
+      $scalar = [Convert]::ToInt32($hex, 16)
+      if ($scalar -eq 0) { return '' }
+      [void]$decoded.Append([char]::ConvertFromUtf32($scalar))
+    } catch { return '' }
+    $i += $width
+  }
+  return $decoded.ToString()
 }

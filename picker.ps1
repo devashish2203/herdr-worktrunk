@@ -138,8 +138,10 @@ if ($openMode -eq 'tab') {
     Start-Sleep -Seconds 2
     exit 1
   }
+  $tabEnv = @()
+  if ($env:HERDR_PLUGIN_CONFIG_DIR) { $tabEnv = @('--env', "HERDR_PLUGIN_CONFIG_DIR=$env:HERDR_PLUGIN_CONFIG_DIR") }
   $tabJson = & $herdr tab create --workspace $env:HERDR_WORKSPACE_ID --cwd (Get-WtCurrentPath) --label $name `
-    --env "WT_PICKER_NAME=$name" --focus | Out-String
+    @tabEnv --focus | Out-String
   $rootPane = $null
   try { $rootPane = (ConvertFrom-Json -InputObject $tabJson).result.root_pane } catch {}
   $newPane = [string]$rootPane.pane_id
@@ -164,20 +166,19 @@ if ($openMode -eq 'tab') {
   }
 
   # The sent command: switch without cd-ing (there is no shell integration to do
-  # it), then cd into the path worktrunk reports, then relabel the tab with the
-  # real branch $name resolved to, keeping the typed name alongside in parens
-  # (e.g. "feat/eager-worktree-focus (pr:16)") when it differs. The command must
-  # contain no double quotes: Windows PowerShell does not escape embedded quotes
-  # when it builds a native command line, so herdr would receive it split into
-  # several argv elements - hence the label is built by concatenation.
+  # it), cd into the path worktrunk reports, then relabel the tab there. The
+  # relabel runs as its own Windows PowerShell process with -ExecutionPolicy
+  # Bypass, like every other plugin entrypoint: the tab's interactive shell has
+  # the user's execution policy, and the client default (Restricted) refuses to
+  # run a .ps1 in-process. The command must contain no double quotes: Windows
+  # PowerShell does not escape embedded quotes when it builds a native command
+  # line, so herdr would receive it split into several argv elements.
+  $qRelabel = "'" + ((Join-Path $pluginRoot 'tab-relabel.ps1') -replace "'", "''") + "'"
   $wtCmd = "`$json = & $qWt switch $switchArgs --no-cd --format=json; " +
     "if (`$LASTEXITCODE -eq 0) { " +
     "try { `$r = ConvertFrom-Json -InputObject ([string]::Join([Environment]::NewLine, @(`$json))); " +
-    "if (`$r.path) { Set-Location -LiteralPath `$r.path } } catch {}; " +
-    "`$branch = git branch --show-current; " +
-    "if (`$branch -ceq `$env:WT_PICKER_NAME) { `$label = `$branch } " +
-    "else { `$label = `$branch + ' (' + `$env:WT_PICKER_NAME + ')' }; " +
-    "& $qHerdr tab rename $qTabId `$label }"
+    "if (`$r.path) { Set-Location -LiteralPath `$r.path; " +
+    "& powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $qRelabel $qHerdr $qTabId $qName } } catch {} }"
 
   # pane run sends the command to the tab's interactive shell; the terminal
   # buffers it until the shell finishes loading.
@@ -208,10 +209,6 @@ try {
   $switchAction = $result.action
 } catch {}
 
-if (-not $resolvedBranch) { $label = $name }
-elseif ([string]$resolvedBranch -cne $name) { $label = "$resolvedBranch ($name)" }
-else { $label = $name }
-
 if (-not $wtPath) {
   $wtJson = & $WtBin list --format=json 2>$null | Out-String
   if ($LASTEXITCODE -eq 0 -and $wtJson.Trim()) {
@@ -226,13 +223,6 @@ if (-not $wtPath) {
   Write-WtError "worktrunk returned no worktree path for: $name"
   Start-Sleep -Seconds 2
   exit 1
-}
-
-# Only a worktree worktrunk just created has hook output worth reading; a switch
-# to an existing one opens straight away. Hold before the workspace opens below -
-# it takes the focus with it.
-if ([string]$switchAction -ceq 'created') {
-  Wait-WorktrunkHoldPane 'create' "created worktree $label."
 }
 
 # Register the worktree under the repo's ROOT workspace, not the picker pane's
@@ -271,10 +261,53 @@ if (-not $rootWorkspaceId) {
 function Get-WtCanonicalPath([string]$Path) {
   try { return (Get-Item -LiteralPath $Path -ErrorAction Stop).FullName } catch { return $Path }
 }
-$labelArgs = @('--label', $label)
+$workspaceId = ''
+try {
+  $treeList = (ConvertFrom-Json -InputObject $sourceJson).result.worktrees
+  foreach ($tree in @($treeList)) {
+    if ((ConvertTo-WtComparablePath (Get-WtCanonicalPath $tree.path)) -eq (ConvertTo-WtComparablePath (Get-WtCanonicalPath $wtPath))) {
+      $workspaceId = [string]$tree.open_workspace_id
+      break
+    }
+  }
+} catch {}
+$currentLabel = ''
+if ($workspaceId) {
+  $currentLabel = '?'
+  try {
+    $workspaces = (ConvertFrom-Json -InputObject (& $herdr workspace list | Out-String)).result.workspaces
+    foreach ($workspace in @($workspaces)) {
+      if ($workspace.workspace_id -ceq $workspaceId -and $workspace.label) {
+        $currentLabel = [string]$workspace.label
+        break
+      }
+    }
+  } catch {}
+}
+$repoLabel = ([string]$source.repo_name) -replace '\.git$', ''
+$labelState = Get-WorktrunkPreparedLabel $wtPath ([string]$resolvedBranch) $name $repoLabel $currentLabel
+$labelArgs = @()
+if ($labelState.Managed) { $labelArgs = @('--label', (ConvertTo-WorktrunkNativeText $labelState.Label)) }
 if ((ConvertTo-WtComparablePath (Get-WtCanonicalPath $wtPath)) -eq (ConvertTo-WtComparablePath (Get-WtCanonicalPath $repoRoot))) {
   $labelArgs = @()
 }
 
+# Name the worktree by the label it keeps: a manual one stays in place.
+$shownLabel = $labelState.Label
+if (-not $labelState.Managed) {
+  $shownLabel = $currentLabel
+  if ($shownLabel -ceq '?') { $shownLabel = if ($resolvedBranch) { [string]$resolvedBranch } else { $name } }
+}
+
+# Only a worktree worktrunk just created has hook output worth reading; a switch
+# to an existing one opens straight away. Hold before the workspace opens below -
+# it takes the focus with it.
+if ([string]$switchAction -ceq 'created') {
+  Wait-WorktrunkHoldPane 'create' "created worktree $shownLabel."
+}
+
+# The main checkout keeps no label state, so saving is a no-op there.
 & $herdr worktree open --cwd $repoRoot --path $wtPath @labelArgs --focus --json
-exit $LASTEXITCODE
+$openExit = $LASTEXITCODE
+if ($openExit -eq 0) { Save-WorktrunkLabel $labelState ([string]$resolvedBranch) }
+exit $openExit

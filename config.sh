@@ -200,3 +200,19 @@ worktrunk_merge_flags() {
     esac
   done
 }
+
+# Presence is separate from value: an explicitly empty template is invalid.
+worktrunk_config_has() {
+  [[ -n ${HERDR_PLUGIN_CONFIG_DIR:-} && -f $HERDR_PLUGIN_CONFIG_DIR/config.toml ]] || return 1
+  LC_ALL=C sed $'1s/^\357\273\277//' "$HERDR_PLUGIN_CONFIG_DIR/config.toml" \
+    | LC_ALL=C grep -Eq "^[[:space:]]*$1[[:space:]]*="
+}
+
+# Labels accept TOML basic-string escapes as well as literal strings. Keep this
+# separate from the legacy scalar reader so other settings retain their behavior.
+worktrunk_label_config_value() {
+  local parser
+  [[ -n ${HERDR_PLUGIN_CONFIG_DIR:-} && -f $HERDR_PLUGIN_CONFIG_DIR/config.toml ]] || return 0
+  parser=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/label-config.jq
+  jq -Rrs --arg key "$1" -f "$parser" "$HERDR_PLUGIN_CONFIG_DIR/config.toml"
+}

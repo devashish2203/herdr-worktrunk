@@ -17,7 +17,7 @@ worktrunk_is_shortcut() {
 # the branch itself, so it stays alongside in parens when the two differ, e.g.
 # "feat/eager-worktree-focus (pr:16)". With no branch to show (empty BRANCH), the
 # label is just NAME.
-worktrunk_switch_label() {
+worktrunk_default_label() {
   local branch=$1 name=$2
   if [[ -z $branch || $branch == "$name" ]]; then
     printf '%s\n' "$name"
@@ -198,5 +198,117 @@ worktrunk_hold_pane() {
 
   if [[ $(worktrunk_hold_on "$action") == true ]]; then
     printf '\n\033[32m%s\033[0m press any key to continue' "$message"; read -n1
+  fi
+}
+
+# PR lookup is deliberately local: opening a workspace never needs network/auth.
+worktrunk_pr_number() {
+  if [[ $1 =~ ^pr:([0-9]+)$ || $1 =~ ^https://github\.com/[^/]+/[^/]+/pull/([0-9]+)([/#?].*)?$ ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  fi
+}
+
+# Single-pass substitution: placeholder-like text in a value is never expanded.
+worktrunk_switch_label() {
+  local branch=$1 name=$2 repo=${3:-} pr=${4:-} preset=default format='' key rest label='' preset_configured=false
+  [[ -n $pr ]] || pr=$(worktrunk_pr_number "$name")
+  if declare -F worktrunk_config_value >/dev/null; then
+    if worktrunk_config_has label_preset; then
+      preset_configured=true
+      preset=$(worktrunk_label_config_value label_preset)
+    fi
+  fi
+  case $preset in
+    default) ;;
+    pr-first|branch-first|branch-only|pr-only)
+      format='{branch}'
+      if [[ -n $pr ]]; then
+        case $preset in
+          pr-first) format='#{pr_number} {branch}' ;;
+          branch-first) format='{branch} · #{pr_number}' ;;
+          pr-only) format='#{pr_number}' ;;
+        esac
+      fi ;;
+    *) printf '\033[33mWarning:\033[0m invalid label_preset %q; using current naming behavior\n' "$preset" >&2
+       worktrunk_default_label "$branch" "$name"; return ;;
+  esac
+  key=label_format
+  [[ -z $pr ]] || key=label_pr_format
+  if declare -F worktrunk_config_has >/dev/null && worktrunk_config_has "$key"; then
+    format=$(worktrunk_label_config_value "$key")
+    if [[ -z $format ]]; then
+      printf '\033[33mWarning:\033[0m invalid or empty %s; using current naming behavior\n' "$key" >&2
+      worktrunk_default_label "$branch" "$name"; return
+    fi
+  elif [[ $preset == default ]]; then
+    if [[ -n $pr && ( $preset_configured == true || $name == "$branch" ) ]]; then
+      worktrunk_default_label "$branch" "pr:$pr"
+    else
+      worktrunk_default_label "$branch" "$name"
+    fi
+    return
+  fi
+  rest=$format
+  while [[ -n $rest ]]; do
+    case $rest in
+      '{branch}'*) label+=$branch; rest=${rest#\{branch\}} ;;
+      '{repo}'*) label+=$repo; rest=${rest#\{repo\}} ;;
+      '{selection}'*) label+=$name; rest=${rest#\{selection\}} ;;
+      '{pr_number}'*)
+        [[ -n $pr ]] || break
+        label+=$pr; rest=${rest#\{pr_number\}} ;;
+      [\{\}]*) break ;;
+      *) label+=${rest:0:1}; rest=${rest:1} ;;
+    esac
+  done
+  if [[ -n $rest || -z ${label//[[:space:]]/} ]]; then
+    printf '\033[33mWarning:\033[0m invalid placeholders or empty label in %s; using current naming behavior\n' "$key" >&2
+    worktrunk_default_label "$branch" "$name"
+  else
+    printf '%s\n' "$label"
+  fi
+}
+
+# Per-worktree, private plugin state, using git's config codec on both platforms.
+# Never write the repository's config or a tracked file. A different branch in
+# the same checkout invalidates cached PR context. Failure to persist is benign.
+# Only linked worktrees keep state: the main checkout belongs to the repository's
+# own workspace, which the plugin never relabels. A linked worktree's git dir is
+# the one with a commondir file, which works on any git with worktrees.
+worktrunk_label_state_file() {
+  local dir
+  dir=$(git -C "$1" rev-parse --absolute-git-dir 2>/dev/null) || return 0
+  [[ -f $dir/commondir ]] || return 0
+  printf '%s/herdr-worktrunk-label' "$dir"
+}
+
+# Sets WORKTRUNK_LABEL/PR/STATE. CURRENT is empty for a newly opened UI; '?' means
+# an existing UI whose label could not be read (conservatively leave it alone).
+worktrunk_prepare_label() {
+  local path=$1 branch=$2 name=$3 repo=$4 current=${5:-} old_branch='' last=''
+  WORKTRUNK_STATE=$(worktrunk_label_state_file "$path")
+  WORKTRUNK_PR=$(worktrunk_pr_number "$name")
+  if [[ -n $WORKTRUNK_STATE ]]; then
+    old_branch=$(git config --file "$WORKTRUNK_STATE" --get label.branch 2>/dev/null || true)
+    if [[ $old_branch == "$branch" ]]; then
+      [[ -n $WORKTRUNK_PR ]] || WORKTRUNK_PR=$(git config --file "$WORKTRUNK_STATE" --get label.pr 2>/dev/null || true)
+      last=$(git config --file "$WORKTRUNK_STATE" --get label.generated 2>/dev/null || true)
+    fi
+  fi
+  WORKTRUNK_LABEL=$(worktrunk_switch_label "$branch" "$name" "$repo" "$WORKTRUNK_PR")
+  WORKTRUNK_MANAGED=true
+  if [[ -n $current && ( -z $last || $current != "$last" ) ]]; then
+    WORKTRUNK_MANAGED=false
+  fi
+}
+
+worktrunk_save_label() {
+  [[ -n $WORKTRUNK_STATE ]] || return 0
+  if ! {
+    git config --file "$WORKTRUNK_STATE" label.branch "$1" &&
+    git config --file "$WORKTRUNK_STATE" label.pr "$WORKTRUNK_PR" &&
+    { [[ $WORKTRUNK_MANAGED != true ]] || git config --file "$WORKTRUNK_STATE" label.generated "$WORKTRUNK_LABEL"; }
+  }; then
+    printf '\033[33mWarning:\033[0m could not save worktrunk label metadata\n' >&2
   fi
 }
