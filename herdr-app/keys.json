@@ -1,0 +1,25 @@
+{
+  "global": {
+    "cmd-alt-g": {
+      "command": "terminal.open",
+      "args": {
+        "argv": ["bash", "-c", "exec bash ~/.config/herdr-app/mods/worktrunk/wt-pick.sh default"],
+        "place": "down"
+      }
+    },
+    "cmd-alt-f": {
+      "command": "terminal.open",
+      "args": {
+        "argv": ["bash", "-c", "exec bash ~/.config/herdr-app/mods/worktrunk/wt-pick.sh current"],
+        "place": "down"
+      }
+    },
+    "cmd-alt-r": {
+      "command": "terminal.open",
+      "args": {
+        "argv": ["bash", "-c", "exec bash ~/.config/herdr-app/mods/worktrunk/wt-remove.sh"],
+        "place": "down"
+      }
+    }
+  }
+}
