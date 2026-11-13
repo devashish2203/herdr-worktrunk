@@ -200,6 +200,17 @@ popup_height = 24
 In a split the picker draws its own rounded border and inset margin, which a
 popup does not need, so the list fills the popup frame herdr already draws.
 
+## Herdr desktop app (herdr-app)
+
+The Herdr desktop app has no plugin system; this repo ships a mod for it in
+[`herdr-app/`](herdr-app/) instead: the switch/create pickers and remove, bound to
+`cmd-alt-g`, `cmd-alt-f` and `cmd-alt-r`, configured through
+`mods/worktrunk/config.json`. Ask the app's agent to add the mod from this repo's
+`herdr-app/` folder, or copy `herdr-app/mods/worktrunk` to
+`~/.config/herdr-app/mods/` and merge `herdr-app/keys.json` into yours.
+[`herdr-app/RECIPE.md`](herdr-app/RECIPE.md) has the options, requirements
+(worktrunk ≥ 0.74, fzf, jq) and what was left out.
+
 ## Requirements
 
 - [**herdr**](https://herdr.dev) ≥ 0.7.0 (Windows support was tested with

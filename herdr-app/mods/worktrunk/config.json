@@ -1,0 +1,8 @@
+{
+  "show_remote_branches": false,
+  "slugify_new_branches": false,
+  "open_mode": "space",
+  "hold_on_create": false,
+  "hold_on_switch": false,
+  "hold_on_remove": false
+}
